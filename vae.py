@@ -1,4 +1,4 @@
-from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten
+from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
 from keras.utils import plot_model
@@ -57,7 +57,9 @@ class VAE:
 		self.vae = Model(self.inputs, self.outputs, name='vae_mlp')
 		
 		def vae_loss(y_true, y_pred):
-			reconstruction_loss = mse(y_true, y_pred)
+			def mean_squared_error(y_t, y_p):
+				return K.mean(K.square(y_p - y_t), axis=[-3,-2,-1])
+			reconstruction_loss = mean_squared_error(y_true, y_pred)
 			kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 			kl_loss = K.sum(kl_loss, axis=-1)
 			kl_loss *= -0.5
