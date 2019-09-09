@@ -8,6 +8,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 INPUT_SHAPE = (28,28,1)
+IMG_SIZE = INPUT_SHAPE[0]
 BATCH_SIZE = 32
 VAE_DIM = 2			# Latent dimension of VAE which encodes the conditioning dataset
 EPOCHS = 10
@@ -16,6 +17,8 @@ TRAIN_VAE = True	# train a vae for begining or load a trained one
 if __name__ == '__main__':
 	# load mnist dataset for training and testing
 	mnist_X_train, mnist_y_train, mnist_X_test, mnist_y_test = utils.load_dataset(dataset='mnist')
+	mnist_X_train = np.reshape(mnist_X_train, (-1, IMG_SIZE**2))
+	mnist_X_test = np.reshape(mnist_X_test, (-1, IMG_SIZE**2))
 
 	if TRAIN_VAE == True:
 		model = VAE(INPUT_SHAPE, VAE_DIM)
