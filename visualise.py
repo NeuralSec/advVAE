@@ -1,16 +1,12 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from keras.models import load_model
-import numpy as np
 import utils
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 VAE_DIM =2
-IMG_SIZE = 28
 
 mnist_X_train, mnist_y_train, mnist_X_test, mnist_y_test = utils.load_dataset(dataset='mnist')
-mnist_X_train = np.reshape(mnist_X_train, (-1, IMG_SIZE**2))
-mnist_X_test = np.reshape(mnist_X_test, (-1, IMG_SIZE**2))
 vae = load_model(f'snapshots/trained-vae-{VAE_DIM}d.h5', compile=False)
 vae_encoder = load_model(f'snapshots/trained-vae-encoder-{VAE_DIM}d.h5', compile=False)
 vae_decoder = load_model(f'snapshots/trained-vae-decoder-{VAE_DIM}d.h5', compile=False)

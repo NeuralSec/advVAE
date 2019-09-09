@@ -11,8 +11,9 @@ INPUT_SHAPE = (28,28,1)
 IMG_SIZE = INPUT_SHAPE[0]
 BATCH_SIZE = 32
 VAE_DIM = 2			# Latent dimension of VAE which encodes the conditioning dataset
+INTER_DIM = 512
 EPOCHS = 10
-TRAIN_VAE = True	# train a vae for begining or load a trained one
+TRAIN_VAE = False	# train a vae for begining or load a trained one
 
 if __name__ == '__main__':
 	# load mnist dataset for training and testing
@@ -21,7 +22,7 @@ if __name__ == '__main__':
 	mnist_X_test = np.reshape(mnist_X_test, (-1, IMG_SIZE**2))
 
 	if TRAIN_VAE == True:
-		model = VAE(INPUT_SHAPE, VAE_DIM)
+		model = VAE(IMG_SIZE, INTER_DIM, VAE_DIM)
 		model.train(mnist_X_train, batch_size=BATCH_SIZE, epochs=EPOCHS, val_ratio=0.1)
 		model.vae.save(f'snapshots/trained-vae-{VAE_DIM}d.h5')
 		model.encoder.save(f'snapshots/trained-vae-encoder-{VAE_DIM}d.h5')
