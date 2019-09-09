@@ -39,5 +39,6 @@ if __name__ == '__main__':
 		print(f'{VAE_DIM}-D VAE loaded.')
 		vae.summary()
 		advvae = advVAE(vae_encoder, vae_decoder, classifier)
+		print(mnist_X_train.shape, mnist_y_train.shape)
 		advvae.attack(mnist_X_train, mnist_y_train, batch_size=32, epochs=10, val_ratio=0.1)
 		advvae.adv_vae.save(f'snapshots/adv-vae-{VAE_DIM}d.h5')
