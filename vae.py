@@ -66,7 +66,7 @@ class VAE:
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
 		self.vae.fit(x, x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
 		return self.vae, self.encoder, self.decoder
-		
+
 
 class ConvVAE:
 	def __init__(self, input_shape, latent_dim):
@@ -146,8 +146,9 @@ class advVAE:
 		self.inputs = self.keras_vae_encoder.inputs
 		self.ouputs = self.keras_vae_decoder(self.keras_vae_encoder(self.inputs)[2])
 		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs)
-		
-		classification_results = self.classifier(self.adv_vae(self.inputs))
+		flatten_img = self.adv_vae(self.inputs)
+		reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
+		classification_results = self.classifier(reshaped_img)
 		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=classification_results)
 		def adv_loss(y_true, y_pred):
 			return K.binary_crossentropy(y_true, y_pred)+1/(1+K.categorical_crossentropy(y_true, y_pred))
