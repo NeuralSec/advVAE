@@ -4,11 +4,12 @@ from keras.models import load_model
 import utils
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+VAE_DIM =2
 
 mnist_X_train, mnist_y_train, mnist_X_test, mnist_y_test = utils.load_dataset(dataset='mnist')
-vae = load_model(f'snapshots/trained_vae.h5', compile=False)
-vae_encoder = load_model(f'snapshots/trained_vae_encoder.h5', compile=False)
-vae_decoder = load_model(f'snapshots/trained_vae_decoder.h5', compile=False)
+vae = load_model(f'snapshots/trained-vae-{VAE_DIM}d.h5', compile=False)
+vae_encoder = load_model(f'snapshots/trained-vae-encoder-{VAE_DIM}d.h5', compile=False)
+vae_decoder = load_model(f'snapshots/trained-vae-decoder-{VAE_DIM}d.h5', compile=False)
 
 outputs = vae.predict(mnist_X_test[:10])
 latent_codes = vae_encoder.predict(mnist_X_test[:10])[2]
