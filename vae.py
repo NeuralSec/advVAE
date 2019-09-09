@@ -5,7 +5,6 @@ from keras.utils import plot_model
 from keras import backend as K
 import keras.losses
 
-
 class VAE:
 	def __init__(self, input_shape, latent_dim):
 		# reparameterization trick
@@ -71,7 +70,36 @@ class VAE:
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
 		self.vae.fit(x, x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
 		return self.vae, self.encoder, self.decoder
-	
+
+class advVAE:
+	def __init__(self, vae_encoder, vae_decoder, classifier):
+		self.keras_vae_encoder = vae_encoder
+		self.keras_vae_decoder = vae_decoder
+		self.classifier = classifier
+		for layer in self.keras_vae_encoder.layers:
+			layer.trainable = False
+		for layer in self.classifier.layers:
+			layer.trainable = False
+		self.inputs = self.keras_vae_encoder.inputs
+		self.ouputs = self.keras_vae_decoder(self.keras_vae_encoder(self.inputs)[2])
+		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs)
+		
+		classification_results = self.classifier(self.adv_vae(self.inputs))
+		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=classification_results)
+		def adv_loss(y_true, y_pred):
+			return K.binary_crossentropy(y_true, y_pred)+1/(1+K.categorical_crossentropy(y_true, y_pred))
+		self.adv_vae_classifier.compile(optimizer='adam', loss=adv_loss, metrics=['acc'])
+
+		def attack(self, x, y, batch_size=32, epochs=10, val_ratio=0.1):
+			self.adv_vae_classifier.fit(x, y, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+			return self.adv_vae
+
+
+
+
+
+		
+
 	
 
 
