@@ -44,7 +44,7 @@ class VAE:
 		latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
 		x = Dense(7*7*32, activation='relu')(latent_inputs)
 		x = Reshape(target_shape=(7, 7, 32))(x)
-		x = Conv2DTranspose(filters=64, kernel_size=3, strides=(2,2), padding='SAME' activation='relu')(x)
+		x = Conv2DTranspose(filters=64, kernel_size=3, strides=(2,2), padding='SAME', activation='relu')(x)
 		x = Conv2DTranspose(filters=32, kernel_size=3, strides=(2,2), padding="SAME", activation='relu')(x)
 		outputs = Conv2DTranspose(filters=1, kernel_size=3, strides=(1, 1), padding="SAME")(x)
 		
@@ -58,7 +58,6 @@ class VAE:
 		
 		def vae_loss(y_true, y_pred):
 			reconstruction_loss = mse(y_true, y_pred)
-			reconstruction_loss *= original_dim
 			kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 			kl_loss = K.sum(kl_loss, axis=-1)
 			kl_loss *= -0.5
