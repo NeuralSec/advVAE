@@ -33,7 +33,6 @@ if __name__ == '__main__':
 		victim.encoder.save(f'snapshots/victim-vae-encoder-{VAE_DIM}d.h5')
 		victim.decoder.save(f'snapshots/victim-vae-decoder-{VAE_DIM}d.h5')
 
-
 	#loading trained vae for adv training
 	elif TRAIN_VAE == False:
 		print('===== Loading victim model =======')
