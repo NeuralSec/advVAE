@@ -24,7 +24,7 @@ classifier = load_model('mnist_model.h5')
 # Evaluation
 cond_data = mnist_y_test
 print(classifier.evaluate(advcvae.predict([mnist_X_test, cond_data]).reshape((-1,28,28,1)), mnist_y_test))
-print(classifier.evaluate(adv_decoder.predict([victim_encoder.predict(mnist_X_test)[2], cond_data]).reshape((-1,28,28,1)), mnist_y_test))
+print(classifier.evaluate(adv_cdecoder.predict([victim_encoder.predict(mnist_X_test)[2], cond_data]).reshape((-1,28,28,1)), mnist_y_test))
 
 # Plotting
 outputs = cvae.predict([mnist_X_test[:10], cond_data[:10]])
@@ -35,7 +35,7 @@ adv_outputs = advcvae.predict([mnist_X_test[:10], cond_data[:10]])
 victim_codes = victim_encoder.predict(mnist_X_test[:10])[2]
 victim_advs = adv_cdecoder.predict([victim_codes, cond_data[:10]])
 random_codes = np.random.normal(0,1,(10,2))
-random_advs = adv_decoder.predict([random_codes, cond_data[:10]])
+random_advs = adv_cdecoder.predict([random_codes, cond_data[:10]])
 fig, axes = plt.subplots(nrows=6, ncols=10)
 for i in range(10):
 	axes[0][i].imshow(mnist_X_test[:10][i].reshape(28,28), cmap='gray')
