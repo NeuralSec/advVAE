@@ -149,16 +149,16 @@ class advVAE:
 		flatten_img = self.adv_vae(self.inputs)
 		reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
 		classification_results = self.classifier(reshaped_img)
-		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=classification_results)
+		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs])
 		def adv_loss(y_true, y_pred):
 			return 1/(1+K.categorical_crossentropy(y_true, y_pred))
-		self.adv_vae_classifier.compile(optimizer='adam', loss=adv_loss, metrics=['acc'])
+		self.adv_vae_classifier.compile(optimizer='adam', loss=[adv_loss,'mse'], metrics=['acc'])
 		self.adv_vae_classifier.summary()
 		self.adv_vae.summary()
 
 	def attack(self, x, y, batch_size=32, epochs=10, val_ratio=0.1):
-		self.adv_vae_classifier.fit(x, y, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
-		return self.adv_vae
+		self.adv_vae_classifier.fit(x, [y, x], epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+		return self.adv_vae, self.keras_vae_decoder
 
 
 

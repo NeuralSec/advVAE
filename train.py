@@ -13,7 +13,7 @@ BATCH_SIZE = 32
 VAE_DIM = 2			# Latent dimension of VAE which encodes the conditioning dataset
 INTER_DIM = 512
 EPOCHS = 10
-TRAIN_VAE = False	# train a vae for begining or load a trained one
+TRAIN_VAE = True	# train a vae for begining or load a trained one
 
 if __name__ == '__main__':
 	# load mnist dataset for training and testing
@@ -27,6 +27,12 @@ if __name__ == '__main__':
 		model.vae.save(f'snapshots/trained-vae-{VAE_DIM}d.h5')
 		model.encoder.save(f'snapshots/trained-vae-encoder-{VAE_DIM}d.h5')
 		model.decoder.save(f'snapshots/trained-vae-decoder-{VAE_DIM}d.h5')
+		victim = VAE(IMG_SIZE, INTER_DIM+88, VAE_DIM)
+		victim.train(mnist_X_train, batch_size=BATCH_SIZE, epochs=EPOCHS, val_ratio=0.1)
+		victim.vae.save(f'snapshots/victim-vae-{VAE_DIM}d.h5')
+		victim.encoder.save(f'snapshots/victim-vae-encoder-{VAE_DIM}d.h5')
+		victim.decoder.save(f'snapshots/victim-vae-decoder-{VAE_DIM}d.h5')
+
 
 	#loading trained vae for adv training
 	elif TRAIN_VAE == False:
@@ -40,5 +46,6 @@ if __name__ == '__main__':
 		vae.summary()
 		advvae = advVAE(vae_encoder, vae_decoder, classifier)
 		print(mnist_X_train.shape, mnist_y_train.shape)
-		advvae.attack(mnist_X_train, mnist_y_train, batch_size=32, epochs=10, val_ratio=0.1)
-		advvae.adv_vae.save(f'snapshots/adv-vae-{VAE_DIM}d.h5')
+		adv_vae, adv_decoder = advvae.attack(mnist_X_train, mnist_y_train, batch_size=32, epochs=10, val_ratio=0.1)
+		adv_vae.save(f'snapshots/adv-vae-{VAE_DIM}d.h5')
+		adv_decoder.save(f'snapshots/adv-decoder-{VAE_DIM}d.h5')
