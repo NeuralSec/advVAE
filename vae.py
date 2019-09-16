@@ -67,6 +67,75 @@ class VAE:
 		self.vae.fit(x, x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
 		return self.vae, self.encoder, self.decoder
 
+class ConvVAE:
+	def __init__(self, input_shape, intermediate_dim, latent_dim):
+		# reparameterization trick
+		# instead of sampling from Q(z|X), sample eps = N(0,I)
+		# z = z_mean + sqrt(var)*eps
+		def sampling(args):
+			"""Reparameterization trick by sampling fr an isotropic unit Gaussian.
+			# Arguments
+				args (tensor): mean and log of variance of Q(z|X)
+			# Returns
+				z (tensor): sampled latent vector
+			"""
+			z_mean, z_log_var = args
+			batch = K.shape(z_mean)[0]
+			dim = K.int_shape(z_mean)[1]
+			# by default, random_normal has mean=0 and std=1.0
+			epsilon = K.random_normal(shape=(batch, dim))
+			return z_mean + K.exp(0.5 * z_log_var) * epsilon
+
+		# VAE model = encoder + decoder
+		# build encoder model
+		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
+
+		x = Conv2D(filters=3, kernel_size=(2,2), strides=1, activation='relu', padding='same')(self.inputs)
+		x = Conv2D(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Flatten()(x)
+		x = Dense(intermediate_dim)(x)
+		z_mean = Dense(latent_dim, name='z_mean')(x)
+		z_log_var = Dense(latent_dim, name='z_log_var')(x)
+		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
+		self.encoder = Model(self.inputs, [z_mean, z_log_var, z], name='encoder')
+		self.encoder.summary()
+
+		latent_inputs = Input(shape=(latent_dim,))
+		x = Dense(intermediate_dim, activation='relu')(latent_inputs)
+		x = Dense(32*16*16, activation='relu')(x)
+		x = Reshape((16, 16, 32))(x)
+		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='valid')(x)
+		decoded = Conv2DTranspose(filters=3, kernel_size=1, strides=1, activation='sigmoid', padding='valid')(x)
+		
+		# instantiate decoder model
+		self.decoder = Model(latent_inputs, decoded, name='decoder')
+		self.decoder.summary()
+		
+		# instantiate VAE model
+		self.outputs = self.decoder(self.encoder(self.inputs)[2])
+		self.vae = Model(self.inputs, self.outputs, name='vae_mlp')
+		
+		def vae_loss(y_true, y_pred):
+			def mean_squared_error(y_t, y_p):
+				return K.mean(K.square(y_p - y_t), axis=[-3,-2,-1])
+			reconstruction_loss = 32*32*3*K.sum(binary_crossentropy(y_true, y_pred), axis=[-2,-1])
+			#reconstruction_loss = 32*32*3*mean_squared_error(y_true, y_pred)
+			kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
+			kl_loss = K.sum(kl_loss, axis=-1)
+			kl_loss *= -0.5
+			return K.mean(reconstruction_loss + kl_loss)
+
+		self.vae.compile(optimizer='adam', loss=vae_loss, metrics=['mae'])
+		self.vae.summary()
+
+	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
+		self.vae.fit(x, x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+		return self.vae, self.encoder, self.decoder
+
 class CVAE:
 	def __init__(self, image_size, cond_dim, intermediate_dim, latent_dim):
 		# reparameterization trick
@@ -133,74 +202,6 @@ class CVAE:
 		self.cvae.fit([x, cond], x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
 		return self.cvae, self.encoder, self.decoder
 
-class ConvVAE:
-	def __init__(self, input_shape, latent_dim):
-		# reparameterization trick
-		# instead of sampling from Q(z|X), sample eps = N(0,I)
-		# z = z_mean + sqrt(var)*eps
-		def sampling(args):
-			"""Reparameterization trick by sampling fr an isotropic unit Gaussian.
-			# Arguments
-				args (tensor): mean and log of variance of Q(z|X)
-			# Returns
-				z (tensor): sampled latent vector
-			"""
-			z_mean, z_log_var = args
-			batch = K.shape(z_mean)[0]
-			dim = K.int_shape(z_mean)[1]
-			# by default, random_normal has mean=0 and std=1.0
-			epsilon = K.random_normal(shape=(batch, dim))
-			return z_mean + K.exp(0.5 * z_log_var) * epsilon
-
-		# VAE model = encoder + decoder
-		# build encoder model
-		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
-
-		x = Conv2D(filters=3, kernel_size=(2,2), strides=1, activation='relu', padding='same')(self.inputs)
-		x = Conv2D(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='same')(x)
-		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
-		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
-		x = Flatten()(x)
-		x = Dense(128)(x)
-		z_mean = Dense(latent_dim, name='z_mean')(x)
-		z_log_var = Dense(latent_dim, name='z_log_var')(x)
-		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
-		self.encoder = Model(self.inputs, [z_mean, z_log_var, z], name='encoder')
-		self.encoder.summary()
-
-		latent_inputs = Input(shape=(latent_dim,))
-		x = Dense(128, activation='relu')(latent_inputs)
-		x = Dense(32*16*16, activation='relu')(x)
-		x = Reshape((16, 16, 32))(x)
-		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
-		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
-		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='valid')(x)
-		decoded = Conv2DTranspose(filters=3, kernel_size=1, strides=1, activation='sigmoid', padding='valid')(x)
-		
-		# instantiate decoder model
-		self.decoder = Model(latent_inputs, decoded, name='decoder')
-		self.decoder.summary()
-		
-		# instantiate VAE model
-		self.outputs = self.decoder(self.encoder(self.inputs)[2])
-		self.vae = Model(self.inputs, self.outputs, name='vae_mlp')
-		
-		def vae_loss(y_true, y_pred):
-			def mean_squared_error(y_t, y_p):
-				return K.mean(K.square(y_p - y_t), axis=[-3,-2,-1])
-			reconstruction_loss = K.sum(binary_crossentropy(y_true, y_pred), axis=[-2,-1])
-			kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-			kl_loss = K.sum(kl_loss, axis=-1)
-			kl_loss *= -0.5
-			return K.mean(reconstruction_loss + kl_loss)
-
-		self.vae.compile(optimizer='adam', loss=vae_loss, metrics=['mae'])
-		self.vae.summary()
-
-	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
-		self.vae.fit(x, x, epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
-		return self.vae, self.encoder, self.decoder
-
 class advVAE:
 	def __init__(self, vae_encoder, vae_decoder, classifier):
 		self.keras_vae_encoder = vae_encoder
@@ -214,8 +215,8 @@ class advVAE:
 		self.ouputs = self.keras_vae_decoder(self.keras_vae_encoder(self.inputs)[2])
 		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs)
 		flatten_img = self.adv_vae(self.inputs)
-		reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
-		classification_results = self.classifier(reshaped_img)
+		#reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
+		classification_results = self.classifier(flatten_img)
 		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs])
 		def adv_loss(y_true, y_pred):
 			return 1/(1+K.categorical_crossentropy(y_true, y_pred))
