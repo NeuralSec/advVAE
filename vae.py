@@ -213,11 +213,11 @@ class advVAE:
 			layer.trainable = False
 		self.inputs = self.keras_vae_encoder.inputs
 		self.ouputs = self.keras_vae_decoder(self.keras_vae_encoder(self.inputs)[2])
-		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs)
+		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs, name='adv_vae')
 		flatten_img = self.adv_vae(self.inputs)
-		#reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
-		classification_results = self.classifier(flatten_img)
-		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs])
+		reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
+		classification_results = self.classifier(reshaped_img)
+		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs], name='adv_vae_classifier')
 		def adv_loss(y_true, y_pred):
 			return 1/(1+K.categorical_crossentropy(y_true, y_pred))
 		self.adv_vae_classifier.compile(optimizer='adam', loss=[adv_loss,'mse'], metrics=['acc'])
