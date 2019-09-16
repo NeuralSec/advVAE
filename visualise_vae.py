@@ -8,9 +8,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 VAE_DIM =2
 IMG_SIZE = 28
 
-mnist_X_train, mnist_y_train, mnist_X_test, mnist_y_test = utils.load_dataset(dataset='mnist')
-mnist_X_train = np.reshape(mnist_X_train, (-1, IMG_SIZE**2))
-mnist_X_test = np.reshape(mnist_X_test, (-1, IMG_SIZE**2))
+mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
+mnist_X_train = np.reshape(mnist_X_train_cnn, (-1, IMG_SIZE**2))
+mnist_X_test = np.reshape(mnist_X_test_cnn, (-1, IMG_SIZE**2))
 
 victim = load_model(f'snapshots/victim-vae-{VAE_DIM}d.h5', compile=False)
 victim_encoder = load_model(f'snapshots/victim-vae-encoder-{VAE_DIM}d.h5', compile=False)
@@ -21,12 +21,16 @@ advvae = load_model(f'snapshots/adv-vae-{VAE_DIM}d.h5', compile=False)
 adv_decoder = load_model(f'snapshots/adv-decoder-{VAE_DIM}d.h5', compile=False)
 classifier = load_model('mnist_model.h5')
 
+CNNvae = load_model(f'snapshots/convo-vae-{VAE_DIM}d.h5', compile=False)
+CNNvae_encoder = load_model(f'snapshots/convo-vae-encoder-{VAE_DIM}d.h5', compile=False)
+CNNvae_decoder = load_model(f'snapshots/convo-vae-decoder-{VAE_DIM}d.h5', compile=False)
+
 # Evaluation
 print(classifier.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), mnist_y_test))
 print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), mnist_y_test))
 
 # Plotting
-outputs = vae.predict(mnist_X_test[:10])
+outputs = CNNvae.predict(mnist_X_test_cnn[:10])
 victim_outputs = victim.predict(mnist_X_test[:10])
 latent_codes = vae_encoder.predict(mnist_X_test[:10])[2]
 adv_outputs = advvae.predict(mnist_X_test[:10])

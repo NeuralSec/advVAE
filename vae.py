@@ -1,4 +1,4 @@
-from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape, Concatenate
+from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape, Concatenate, MaxPooling2D, UpSampling2D
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
 from keras.utils import plot_model
@@ -154,29 +154,27 @@ class ConvVAE:
 
 		# VAE model = encoder + decoder
 		# build encoder model
-		self.inputs = Input(shape=input_shape, name='encoder_input')
-		x = Conv2D(filters=32, kernel_size=3, strides=(2,2), activation='relu')(self.inputs)
-		x = Conv2D(filters=64, kernel_size=3, strides=(2,2), activation='relu')(x)
+		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
+
+		x = Conv2D(3, 4, (2, 2), activation='relu', padding='same')(self.inputs)
+		x = Conv2D(64, 4, (2, 2), activation='relu', padding='same')(x)
+		x = Conv2D(64, 4, (2, 2), activation='relu', padding='same')(x)
+		# at this point the representation is (4, 4, 8) i.e. 128-dimensional
 		x = Flatten()(x)
 		z_mean = Dense(latent_dim, name='z_mean')(x)
 		z_log_var = Dense(latent_dim, name='z_log_var')(x)
-		# use reparameterization trick to push the sampling out as input
-		# note that "output_shape" isn't necessary with the TensorFlow backend
 		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
-		# instantiate encoder model
 		self.encoder = Model(self.inputs, [z_mean, z_log_var, z], name='encoder')
-		self.encoder.summary()
 		
-		# build decoder model
-		latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
-		x = Dense(7*7*32, activation='relu')(latent_inputs)
-		x = Reshape(target_shape=(7, 7, 32))(x)
-		x = Conv2DTranspose(filters=64, kernel_size=3, strides=(2,2), padding='SAME', activation='relu')(x)
-		x = Conv2DTranspose(filters=32, kernel_size=3, strides=(2,2), padding="SAME", activation='relu')(x)
-		outputs = Conv2DTranspose(filters=1, kernel_size=3, strides=(1, 1), padding="SAME")(x)
+		latent_inputs = Input(shape=(latent_dim,))
+		x = Dense(4*4*64)(latent_inputs)
+		x = Reshape((-1, 4, 4, 64))(x)
+		x = Conv2DTranspose(64, 4, (2, 2), activation='relu', padding='same')(x)
+		x = Conv2DTranspose(64, 4, (2, 2), activation='relu', padding='same')(x)
+		decoded = ConConv2DTransposev2D(3, 4, (2, 2), activation='sigmoid')(x)
 		
 		# instantiate decoder model
-		self.decoder = Model(latent_inputs, outputs, name='decoder')
+		self.decoder = Model(latent_inputs, decoded, name='decoder')
 		self.decoder.summary()
 		
 		# instantiate VAE model
