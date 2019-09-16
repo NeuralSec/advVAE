@@ -156,11 +156,12 @@ class ConvVAE:
 		# build encoder model
 		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
 
-		x = Conv2D(filters=3, kernel_size=4, strides=2, activation='relu', padding='same')(self.inputs)
-		x = Conv2D(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
-		x = Conv2D(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
-		# at this point the representation is (4, 4, 8) i.e. 128-dimensional
+		x = Conv2D(filters=3, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(self.inputs)
+		x = Conv2D(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
 		x = Flatten()(x)
+		x = Dense(128)(x)
 		z_mean = Dense(latent_dim, name='z_mean')(x)
 		z_log_var = Dense(latent_dim, name='z_log_var')(x)
 		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
@@ -168,11 +169,13 @@ class ConvVAE:
 		self.encoder.summary()
 
 		latent_inputs = Input(shape=(latent_dim,))
-		x = Dense(4*4*64)(latent_inputs)
-		x = Reshape((4, 4, 64))(x)
-		x = Conv2DTranspose(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
-		x = Conv2DTranspose(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
-		decoded = Conv2DTranspose(filters=3, kernel_size=4, strides=2, activation='sigmoid', padding='same')(x)
+		x = Dense(128, activation='relu')(latent_inputs)
+		x = Dense(8192, activation='relu')(x)
+		x = Reshape((16, 16, 32))(x)
+		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu', padding='same')(x)
+		decoded = Conv2DTranspose(filters=3, kernel_size=(2,2), strides=(1,1), activation='sigmoid', padding='same')(x)
 		
 		# instantiate decoder model
 		self.decoder = Model(latent_inputs, decoded, name='decoder')
