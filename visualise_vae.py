@@ -8,29 +8,32 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 VAE_DIM =2
 IMG_SIZE = 28
 
+cifar10_X_train, cifar10_y_train, cifar10_X_test, cifar10_y_test = utils.load_dataset(dataset='cifar10')
 mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
 mnist_X_train = np.reshape(mnist_X_train_cnn, (-1, IMG_SIZE**2))
 mnist_X_test = np.reshape(mnist_X_test_cnn, (-1, IMG_SIZE**2))
 
 victim = load_model(f'snapshots/victim-vae-{VAE_DIM}d.h5', compile=False)
+victim.summary()
 victim_encoder = load_model(f'snapshots/victim-vae-encoder-{VAE_DIM}d.h5', compile=False)
 vae = load_model(f'snapshots/trained-vae-{VAE_DIM}d.h5', compile=False)
 vae_encoder = load_model(f'snapshots/trained-vae-encoder-{VAE_DIM}d.h5', compile=False)
 vae_decoder = load_model(f'snapshots/trained-vae-decoder-{VAE_DIM}d.h5', compile=False)
 advvae = load_model(f'snapshots/adv-vae-{VAE_DIM}d.h5', compile=False)
 adv_decoder = load_model(f'snapshots/adv-decoder-{VAE_DIM}d.h5', compile=False)
+adv_decoder.summary()
 classifier = load_model('mnist_model.h5')
-
-CNNvae = load_model(f'snapshots/convo-vae-{VAE_DIM}d.h5', compile=False)
-CNNvae_encoder = load_model(f'snapshots/convo-vae-encoder-{VAE_DIM}d.h5', compile=False)
-CNNvae_decoder = load_model(f'snapshots/convo-vae-decoder-{VAE_DIM}d.h5', compile=False)
+classifier.summary()
+CNNvae = load_model(f'snapshots/cifar10-convo-vae-20d.h5', compile=False)
+CNNvae_encoder = load_model(f'snapshots/cifar10-convo-vae-encoder-20d.h5', compile=False)
+CNNvae_decoder = load_model(f'snapshots/cifar10-convo-vae-decoder-20d.h5', compile=False)
 
 # Evaluation
 print(classifier.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), mnist_y_test))
 print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), mnist_y_test))
 
 # Plotting
-outputs = CNNvae.predict(mnist_X_test_cnn[:10])
+outputs = CNNvae.predict(cifar10_X_test[:10])
 victim_outputs = victim.predict(mnist_X_test[:10])
 latent_codes = vae_encoder.predict(mnist_X_test[:10])[2]
 adv_outputs = advvae.predict(mnist_X_test[:10])
@@ -40,8 +43,8 @@ random_codes = np.random.normal(0,1,(10,2))
 random_advs = adv_decoder.predict(random_codes)
 fig, axes = plt.subplots(nrows=6, ncols=10)
 for i in range(10):
-	axes[0][i].imshow(mnist_X_test[:10][i].reshape(28,28), cmap='gray')
-	axes[1][i].imshow(outputs[i].reshape(28,28), cmap='gray')
+	axes[0][i].imshow(cifar10_X_test[:10][i])
+	axes[1][i].imshow(outputs[i])
 	axes[2][i].imshow(victim_outputs[i].reshape(28,28), cmap='gray')
 	axes[3][i].imshow(adv_outputs[i].reshape(28,28), cmap='gray')
 	axes[4][i].imshow(random_advs[i].reshape(28,28), cmap='gray')

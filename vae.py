@@ -156,22 +156,23 @@ class ConvVAE:
 		# build encoder model
 		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
 
-		x = Conv2D(3, 4, (2, 2), activation='relu', padding='same')(self.inputs)
-		x = Conv2D(64, 4, (2, 2), activation='relu', padding='same')(x)
-		x = Conv2D(64, 4, (2, 2), activation='relu', padding='same')(x)
+		x = Conv2D(filters=3, kernel_size=4, strides=2, activation='relu', padding='same')(self.inputs)
+		x = Conv2D(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
+		x = Conv2D(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
 		# at this point the representation is (4, 4, 8) i.e. 128-dimensional
 		x = Flatten()(x)
 		z_mean = Dense(latent_dim, name='z_mean')(x)
 		z_log_var = Dense(latent_dim, name='z_log_var')(x)
 		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
 		self.encoder = Model(self.inputs, [z_mean, z_log_var, z], name='encoder')
-		
+		self.encoder.summary()
+
 		latent_inputs = Input(shape=(latent_dim,))
 		x = Dense(4*4*64)(latent_inputs)
-		x = Reshape((-1, 4, 4, 64))(x)
-		x = Conv2DTranspose(64, 4, (2, 2), activation='relu', padding='same')(x)
-		x = Conv2DTranspose(64, 4, (2, 2), activation='relu', padding='same')(x)
-		decoded = ConConv2DTransposev2D(3, 4, (2, 2), activation='sigmoid')(x)
+		x = Reshape((4, 4, 64))(x)
+		x = Conv2DTranspose(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=64, kernel_size=4, strides=2, activation='relu', padding='same')(x)
+		decoded = Conv2DTranspose(filters=3, kernel_size=4, strides=2, activation='sigmoid', padding='same')(x)
 		
 		# instantiate decoder model
 		self.decoder = Model(latent_inputs, decoded, name='decoder')
@@ -184,7 +185,7 @@ class ConvVAE:
 		def vae_loss(y_true, y_pred):
 			def mean_squared_error(y_t, y_p):
 				return K.mean(K.square(y_p - y_t), axis=[-3,-2,-1])
-			reconstruction_loss = mean_squared_error(y_true, y_pred)
+			reconstruction_loss = K.sum(binary_crossentropy(y_true, y_pred), axis=[-2,-1])
 			kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 			kl_loss = K.sum(kl_loss, axis=-1)
 			kl_loss *= -0.5

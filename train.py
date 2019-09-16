@@ -7,13 +7,13 @@ from vae import VAE, ConvVAE, CVAE, advVAE, advCVAE
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
-INPUT_SHAPE = (28,28,1)
+INPUT_SHAPE = (32,32,3)
 IMG_SIZE = INPUT_SHAPE[0]
 BATCH_SIZE = 32
 COND_DIM = 10
-VAE_DIM = 200			# Latent dimension of VAE which encodes the conditioning dataset
+VAE_DIM = 20			# Latent dimension of VAE which encodes the conditioning dataset
 INTER_DIM = 512
-EPOCHS = 100
+EPOCHS = 15
 TRAIN_VAE = False	# train a vae for begining or load a trained one
 DEBUG =True
 
