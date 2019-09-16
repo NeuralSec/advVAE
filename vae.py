@@ -156,10 +156,10 @@ class ConvVAE:
 		# build encoder model
 		self.inputs = Input(shape=input_shape)  # adapt this if using `channels_first` image data format
 
-		x = Conv2D(filters=3, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(self.inputs)
+		x = Conv2D(filters=3, kernel_size=(2,2), strides=1, activation='relu', padding='same')(self.inputs)
 		x = Conv2D(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='same')(x)
-		x = Conv2D(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
-		x = Conv2D(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
 		x = Flatten()(x)
 		x = Dense(128)(x)
 		z_mean = Dense(latent_dim, name='z_mean')(x)
@@ -170,12 +170,12 @@ class ConvVAE:
 
 		latent_inputs = Input(shape=(latent_dim,))
 		x = Dense(128, activation='relu')(latent_inputs)
-		x = Dense(8192, activation='relu')(x)
+		x = Dense(32*16*16, activation='relu')(x)
 		x = Reshape((16, 16, 32))(x)
-		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
-		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(1,1), activation='relu', padding='same')(x)
-		x = Conv2DTranspose(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu', padding='same')(x)
-		decoded = Conv2DTranspose(filters=3, kernel_size=(2,2), strides=(1,1), activation='sigmoid', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x)
+		x = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='valid')(x)
+		decoded = Conv2DTranspose(filters=3, kernel_size=1, strides=1, activation='sigmoid', padding='valid')(x)
 		
 		# instantiate decoder model
 		self.decoder = Model(latent_inputs, decoded, name='decoder')
