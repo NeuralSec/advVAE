@@ -1,3 +1,4 @@
+import tensorflow as tf
 from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape, Concatenate, MaxPooling2D, UpSampling2D
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
@@ -203,7 +204,7 @@ class CVAE:
 		return self.cvae, self.encoder, self.decoder
 
 class advVAE:
-	def __init__(self, vae_encoder, vae_decoder, classifier):
+	def __init__(self, vae_encoder, vae_decoder, classifier, is_targeted=False):
 		self.keras_vae_encoder = vae_encoder
 		self.keras_vae_decoder = vae_decoder
 		self.classifier = classifier
@@ -218,9 +219,17 @@ class advVAE:
 		reshaped_img = Reshape(target_shape=(28, 28, 1))(flatten_img)
 		classification_results = self.classifier(reshaped_img)
 		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs], name='adv_vae_classifier')
-		def adv_loss(y_true, y_pred):
-			return 1/(1+K.categorical_crossentropy(y_true, y_pred))
-		self.adv_vae_classifier.compile(optimizer='adam', loss=[adv_loss,'mse'], metrics=['acc'])
+		def non_targeted_loss(y_true, y_pred):
+			real = tf.reduce_sum(y_true * y_pred, 1)
+			other = tf.reduce_max((1 - y_true) * y_pred - (y_true * 10000), 1)
+			return 0.1*tf.reduce_sum(tf.maximum(0.0, real - other))
+		def targeted_loss(y_true, y_pred):
+			real = tf.reduce_sum(y_true * y_pred, 1)
+			other = tf.reduce_max((1 - y_true) * y_pred - (y_true * 10000), 1)
+			return 0.1*tf.reduce_sum(tf.maximum(0.0, other - real))
+		if is_targeted:
+			self.adv_vae_classifier.compile(optimizer='adam', loss=[targeted_loss,'mse'], metrics=['acc'])
+		self.adv_vae_classifier.compile(optimizer='adam', loss=[non_targeted_loss,'mse'], metrics=['acc'])
 		self.adv_vae_classifier.summary()
 		self.adv_vae.summary()
 
