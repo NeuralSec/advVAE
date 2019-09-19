@@ -4,7 +4,7 @@ from keras.models import load_model
 import numpy as np
 import utils
 import os
-from train import DATA, MNIST_SIZE, MNIST_VAE_DIM, CIFAR_VAE_DIM
+from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, TARGETED, TARGET_CLASS
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 if DATA == 'mnist':
@@ -13,8 +13,8 @@ elif DATA == 'cifar10':
 	VAE_DIM = CIFAR_VAE_DIM
 
 mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
-mnist_X_train = np.reshape(mnist_X_train_cnn, (-1, MNIST_SIZE**2))
-mnist_X_test = np.reshape(mnist_X_test_cnn, (-1, MNIST_SIZE**2))
+mnist_X_train = np.reshape(mnist_X_train_cnn, (-1, 28**2))
+mnist_X_test = np.reshape(mnist_X_test_cnn, (-1, 28**2))
 cifar10_X_train, cifar10_y_train, cifar10_X_test, cifar10_y_test = utils.load_dataset(dataset='cifar10')
 
 victim = load_model(f'snapshots/victim-{DATA}-vae-{VAE_DIM}d.h5', compile=False)
@@ -26,13 +26,34 @@ vae_decoder = load_model(f'snapshots/{DATA}-vae-decoder-{VAE_DIM}d.h5', compile=
 advvae = load_model(f'snapshots/{DATA}-adv-vae-{VAE_DIM}d.h5', compile=False)
 adv_decoder = load_model(f'snapshots/{DATA}-adv-decoder-{VAE_DIM}d.h5', compile=False)
 adv_decoder.summary()
+substitute = load_model(f'{DATA}_substitute.h5')
+substitute.summary()
 classifier = load_model(f'{DATA}_model.h5')
 classifier.summary()
 
 # Evaluation
 if DATA == 'mnist':
-	print(classifier.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), mnist_y_test))
-	print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), mnist_y_test))
+	if TARGETED:
+		y_labels = np.zeros(mnist_y_test.shape)
+		y_labels[:,TARGET_CLASS] = 1
+		print('**********************Black-box targeted attacks eval (mnist)******************************')
+		print(np.argmax(classifier.predict(advvae.predict(mnist_X_test[:10]).reshape((-1,28,28,1))), axis=-1))
+		print(classifier.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), y_labels))
+		print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), y_labels))
+		print('**********************White-box targeted attacks eval (mnist)******************************')
+		print(np.argmax(substitute.predict(advvae.predict(mnist_X_test[:10]).reshape((-1,28,28,1))), axis=-1))
+		print(substitute.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), y_labels))
+		print(substitute.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), y_labels))
+	else:
+		print('**********************Black-box non-targeted attacks eval (mnist)******************************')
+		print(np.argmax(classifier.predict(advvae.predict(mnist_X_test[:10]).reshape((-1,28,28,1))), axis=-1))
+		print(classifier.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), mnist_y_test))
+		print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), mnist_y_test))
+		print('**********************White-box non-targeted attacks eval (mnist)******************************')
+		print(np.argmax(substitute.predict(advvae.predict(mnist_X_test[:10]).reshape((-1,28,28,1))), axis=-1))
+		print(substitute.evaluate(advvae.predict(mnist_X_test).reshape((-1,28,28,1)), mnist_y_test))
+		print(substitute.evaluate(adv_decoder.predict(victim_encoder.predict(mnist_X_test)[2]).reshape((-1,28,28,1)), mnist_y_test))
+
 	# Plotting
 	outputs = vae.predict(mnist_X_test[:10])
 	victim_outputs = victim.predict(mnist_X_test[:10])
@@ -52,7 +73,7 @@ if DATA == 'mnist':
 		axes[5][i].imshow(victim_advs[i].reshape(28,28), cmap='gray')
 
 	axes[0][5].set_title('Inputs')
-	axes[1][5].set_title('Local VAE Outputs')
+	axes[1][5].set_title('Benign VAE Outputs')
 	axes[2][5].set_title('Blackbox Victim VAE Outputs')
 	axes[3][5].set_title('Adversarial Outputs')
 	axes[4][5].set_title('Random Adversarial Outputs')
@@ -62,8 +83,26 @@ if DATA == 'mnist':
 	plt.show()
 
 elif DATA == 'cifar10':
-	print(classifier.evaluate(advvae.predict(cifar10_X_test), cifar10_y_test))
-	print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(cifar10_X_test)[2]), cifar10_y_test))
+	if TARGETED:
+		y_labels = np.zeros(cifar10_y_test.shape)
+		y_labels[:,TARGET_CLASS] = 1
+		print('**********************Black-box targeted attacks eval (cifar10)******************************')
+		print(np.argmax(classifier.predict(advvae.predict(cifar10_X_test)), axis=-1))
+		print(classifier.evaluate(advvae.predict(cifar10_X_test), y_labels))
+		print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(cifar10_X_test)[2]), y_labels))
+		print('**********************White-box targeted attacks eval (cifar10)******************************')
+		print(np.argmax(substitute.predict(advvae.predict(cifar10_X_test)), axis=-1))
+		print(substitute.evaluate(advvae.predict(cifar10_X_test), y_labels))
+		print(substitute.evaluate(adv_decoder.predict(victim_encoder.predict(cifar10_X_test)[2]), y_labels))
+	else:
+		print('**********************Black-box non-targeted attacks eval (cifar10)******************************')
+		print(np.argmax(classifier.predict(advvae.predict(cifar10_X_test)), axis=-1))
+		print(classifier.evaluate(advvae.predict(cifar10_X_test), cifar10_y_test))
+		print(classifier.evaluate(adv_decoder.predict(victim_encoder.predict(cifar10_X_test)[2]), cifar10_y_test))
+		print('**********************White-box non-targeted attacks eval (cifar10)******************************')
+		print(np.argmax(substitute.predict(advvae.predict(cifar10_X_test)), axis=-1))
+		print(substitute.evaluate(advvae.predict(cifar10_X_test), cifar10_y_test))
+		print(substitute.evaluate(adv_decoder.predict(victim_encoder.predict(cifar10_X_test)[2]), cifar10_y_test))
 	# Plotting
 	outputs = vae.predict(cifar10_X_test[:10])
 	victim_outputs = victim.predict(cifar10_X_test[:10])
@@ -83,7 +122,7 @@ elif DATA == 'cifar10':
 		axes[5][i].imshow(victim_advs[i])
 
 	axes[0][5].set_title('Inputs')
-	axes[1][5].set_title('Local VAE Outputs')
+	axes[1][5].set_title('Benign VAE Outputs')
 	axes[2][5].set_title('Blackbox Victim VAE Outputs')
 	axes[3][5].set_title('Adversarial Outputs')
 	axes[4][5].set_title('Random Adversarial Outputs')
