@@ -1,5 +1,5 @@
 import tensorflow as tf
-from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape, Concatenate, MaxPooling2D, UpSampling2D
+from keras.layers import Lambda, Input, Dense, Conv2D, Conv2DTranspose, Flatten, Reshape, Concatenate, MaxPooling2D, UpSampling2D, Average
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
 from keras.utils import plot_model
@@ -364,7 +364,47 @@ class advCVAE:
 
 #################################################################################################################################################
 
-		
+class advEgnosticVAE:
+	def __init__(self, vae_encoders, vae_decoder, classifier, c=1., is_targeted=True, for_mnist=True):
+		self.keras_vae_encoders = vae_encoders
+		self.keras_vae_decoder = vae_decoder
+		self.classifier = classifier
+		for encoder in self.keras_vae_encoders:
+			for layer in encoder.layers:
+				layer.trainable = False
+		for layer in self.classifier.layers:
+			layer.trainable = False
+		self.inputs = self.keras_vae_encoders[0].inputs
+		encoder_outputs = [encoder(self.inputs)[2] for encoder in self.keras_vae_encoders]
+		print(f'******************{encoder_outputs}*******************')
+		averaged_latent_z = Average()(encoder_outputs)
+		self.ouputs = self.keras_vae_decoder(averaged_latent_z)
+		self.adv_vae = Model(inputs=self.inputs, outputs=self.ouputs, name='adv_vae')
+		ex = self.adv_vae(self.inputs)
+		if for_mnist:
+			ex = Reshape(target_shape=(28, 28, 1))(ex)
+		classification_results = self.classifier(ex)
+		self.adv_vae_classifier = Model(inputs=self.inputs, outputs=[classification_results, self.ouputs], name='adv_vae_classifier')
+		def non_targeted_loss(y_true, y_pred):
+			real = tf.reduce_sum(y_true * y_pred, 1)
+			other = tf.reduce_max((1 - y_true) * y_pred - (y_true * 10000), 1)
+			return c*tf.reduce_sum(tf.maximum(0.0, real - other))
+		def targeted_loss(y_true, y_pred):
+			real = tf.reduce_sum(y_true * y_pred, 1)
+			other = tf.reduce_max((1 - y_true) * y_pred - (y_true * 10000), 1)
+			return c*tf.reduce_sum(tf.maximum(0.0, other - real))
+		if is_targeted:
+			self.adv_vae_classifier.compile(optimizer='adam', loss=[targeted_loss,'mse'], metrics=['mse'])
+		else:
+			self.adv_vae_classifier.compile(optimizer='adam', loss=[non_targeted_loss,'mse'], metrics=['mse'])
+		print('***********************advVAE with classifier summary************************')
+		self.adv_vae_classifier.summary()
+		print('***********************advVAE summary***************************')
+		self.adv_vae.summary()
+
+	def attack(self, x, y, batch_size=32, epochs=10, val_ratio=0.1):
+		self.adv_vae_classifier.fit(x, [y, x], epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+		return self.adv_vae, self.keras_vae_decoder
 
 	
 
