@@ -55,7 +55,7 @@ def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_te
 			axes[3][i].imshow(adv_outputs[i].reshape(28,28), cmap='gray')
 			axes[4][i].imshow(random_advs[i].reshape(28,28), cmap='gray')
 			axes[5][i].imshow(victim_advs[i].reshape(28,28), cmap='gray')
-			axes[5][i].set_xlabel(f'{np.argmax(y_test[:10][i])}')
+			axes[0][i].set_title(f'{np.argmax(y_test[:10][i])}')
 		if dataset=='cifar10':
 			axes[0][i].imshow(X_test[:10][i])
 			axes[1][i].imshow(outputs[i])
@@ -63,9 +63,9 @@ def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_te
 			axes[3][i].imshow(adv_outputs[i])
 			axes[4][i].imshow(random_advs[i])
 			axes[5][i].imshow(victim_advs[i])
-			axes[5][i].set_xlabel(f'{np.argmax(y_test[:10][i])}')
+			axes[0][i].set_title(f'{np.argmax(y_test[:10][i])}')
 
-	axes[0][5].set_title('Inputs')
+	#axes[0][5].set_title('Inputs')
 	axes[1][5].set_title('Shadiow VAE (Benign) Outputs')
 	axes[2][5].set_title('Victim VAE Outputs')
 	axes[3][5].set_title('White-Box-Encoder Attacks')
@@ -176,6 +176,6 @@ elif DATA == 'cifar10':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='cifar10')
-	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='cifar10')
 
