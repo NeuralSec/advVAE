@@ -64,15 +64,16 @@ def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_te
 			axes[4][i].imshow(random_advs[i])
 			axes[5][i].imshow(victim_advs[i])
 			axes[0][i].set_title(f'{np.argmax(y_test[:10][i])}')
-
-	#axes[0][5].set_title('Inputs')
-	axes[1][5].set_title('Shadiow VAE (Benign) Outputs')
-	axes[2][5].set_title('Victim VAE Outputs')
-	axes[3][5].set_title('White-Box-Encoder Attacks')
-	axes[4][5].set_title('Random Generated Attacks')
-	axes[5][5].set_title('Black-Box-Encoder Attacks')
-	for i in range(10):
-		[axes[j][i].axis('off') for j in range(6)]
+	for ax in axes:
+		ax.set_xticks([])
+    	ax.set_yticks([])
+    cols = [f'{t}' for t in np.argmax(y_test[:10])]
+	rows = ['Shadiow VAE (Benign) Outputs', 'Victim VAE Outputs', 'White-Box-Encoder Attacks', 'Random Generated Attacks', 'Black-Box-Encoder Attacks']
+    for ax, col in zip(axes[0], cols):
+    	ax.set_title(col)
+	for ax, row in zip(axes[:,0], rows):
+	    ax.set_ylabel(row, rotation=0, size='large')
+   	fig.tight_layout()
 	plt.show()
 
 mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
