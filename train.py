@@ -10,7 +10,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 DATA ='cifar10'
 BATCH_SIZE = 32
 VAE_EPOCHS = 20
-ADV_EPOCHS = 100
+ADV_EPOCHS = 20
 TARGETED = False
 TARGET_CLASS = 0
 
@@ -24,12 +24,11 @@ if DATA =='mnist':
 elif DATA =='cifar10':
 	INPUT_SHAPE = (32,32,3)
 TRAIN_VAE = False			# train a vae for begining or load a trained one
-TRAIN_advVAE = False
+TRAIN_advVAE = True
 TRAIN_CVAE = False
 TRAIN_advCVAE = False
-TRAIN_EGNOSTIC_VAE =True	# Train an encoder-egnostic MVD
+TRAIN_EGNOSTIC_VAE =False	# Train an encoder-egnostic MVD
 VAE_NUM = 10 		 		# Number of encoders used to train the encoder-egnostic MVD
-
 
 if __name__ == '__main__':
 	# load mnist dataset for training and testing
@@ -38,6 +37,7 @@ if __name__ == '__main__':
 	mnist_X_test = np.reshape(mnist_X_test, (-1, 28**2))
 	cifar10_X_train, cifar10_y_train, cifar10_X_test, cifar10_y_test = utils.load_dataset(dataset='cifar10')
 	print('===== Loading shadow models =======')
+	resenet20 = load_model('trained_resnet/ResNet20v1-cifar10.h5')
 	mnist_substitute = load_model('mnist_substitute.h5')
 	mnist_substitute.layers.pop()
 	cifar10_substitute = load_model('cifar10_substitute.h5')
@@ -143,7 +143,7 @@ if __name__ == '__main__':
 			vae_encoder = load_model(f'./snapshots/cifar10-vae-encoder-{CIFAR_VAE_DIM}d.h5', compile=False)
 			vae_decoder = load_model(f'./snapshots/cifar10-vae-decoder-{CIFAR_VAE_DIM}d.h5', compile=False)
 			print(f'{CIFAR_VAE_DIM}-D VAE loaded.')
-			advvae = advVAE(vae_encoder, vae_decoder, cifar10_substitute, c=0.05, is_targeted=TARGETED, for_mnist=False)
+			advvae = advVAE(vae_encoder, vae_decoder, resenet20, c=0.05, is_targeted=TARGETED, for_mnist=False)
 			if TARGETED:
 				y_labels = np.zeros(cifar10_y_train.shape)
 				y_labels[:,TARGET_CLASS] = 1
