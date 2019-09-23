@@ -12,6 +12,11 @@ if DATA == 'mnist':
 	VAE_DIM = MNIST_VAE_DIM
 elif DATA == 'cifar10':
 	VAE_DIM = CIFAR_VAE_DIM
+
+if TARGETED:
+	TITLE = f'Targeted to {TARGET_CLASS}'
+else:
+	TITLE = 'Non-Targeted'
 LOOSE = False
 
 
@@ -33,9 +38,9 @@ def cifar10_eval_set_selection(X, y, model, vae):
 	inds = np.where(pred_labels == true_labels)
 	return X[inds][:1000], y[inds][:1000]
 
-def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_test, y_test, dataset='mnist'):
+def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, X_test, y_test, title='', dataset='mnist'):
 	# Plotting
-	outputs = vae.predict(X_test[:10])
+	benign_vae_outputs = vae.predict(X_test[:10])
 	latent_codes = vae_encoder.predict(X_test[:10])[2]
 	victim_outputs = victim_vae.predict(X_test[:10])
 	victim_codes = victim_encoder.predict(X_test[:10])[2]
@@ -49,31 +54,43 @@ def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_te
 	fig, axes = plt.subplots(nrows=6, ncols=10)
 	for i in range(10):
 		if dataset=='mnist':
-			axes[0][i].imshow(X_test[:10][i].reshape(28,28), cmap='gray')
-			axes[1][i].imshow(outputs[i].reshape(28,28), cmap='gray')
-			axes[2][i].imshow(victim_outputs[i].reshape(28,28), cmap='gray')
-			axes[3][i].imshow(adv_outputs[i].reshape(28,28), cmap='gray')
-			axes[4][i].imshow(random_advs[i].reshape(28,28), cmap='gray')
-			axes[5][i].imshow(victim_advs[i].reshape(28,28), cmap='gray')
-			axes[0][i].set_title(f'{np.argmax(y_test[:10][i])}')
+			X_test = X_test.reshape(-1, 28, 28, 1)
+			benign_vae_outputs = benign_vae_outputs.reshape(-1, 28, 28, 1)
+			victim_outputs = victim_outputs.reshape(-1, 28, 28, 1)
+			adv_outputs = adv_outputs.reshape(-1, 28, 28, 1)
+			random_advs = random_advs.reshape(-1, 28, 28, 1)
+			victim_advs = victim_advs.reshape(-1, 28, 28, 1)
+			axes[0][i].imshow(X_test[:10][i].reshape(28, 28), cmap='gray')
+			axes[1][i].imshow(benign_vae_outputs[i].reshape(28, 28), cmap='gray')
+			axes[2][i].imshow(victim_outputs[i].reshape(28, 28), cmap='gray')
+			axes[3][i].imshow(adv_outputs[i].reshape(28, 28), cmap='gray')
+			axes[4][i].imshow(random_advs[i].reshape(28, 28), cmap='gray')
+			axes[5][i].imshow(victim_advs[i].reshape(28, 28), cmap='gray')
+		
 		if dataset=='cifar10':
 			axes[0][i].imshow(X_test[:10][i])
-			axes[1][i].imshow(outputs[i])
+			axes[1][i].imshow(benign_vae_outputs[i])
 			axes[2][i].imshow(victim_outputs[i])
 			axes[3][i].imshow(adv_outputs[i])
 			axes[4][i].imshow(random_advs[i])
 			axes[5][i].imshow(victim_advs[i])
-			axes[0][i].set_title(f'{np.argmax(y_test[:10][i])}')
 	for ax in axes:
-		ax.set_xticks([])
-    	ax.set_yticks([])
-    cols = [f'{t}' for t in np.argmax(y_test[:10])]
-	rows = ['Shadiow VAE (Benign) Outputs', 'Victim VAE Outputs', 'White-Box-Encoder Attacks', 'Random Generated Attacks', 'Black-Box-Encoder Attacks']
-    for ax, col in zip(axes[0], cols):
-    	ax.set_title(col)
+		[a.set_xticks([]) for a in ax]
+		[a.set_yticks([]) for a in ax]
+	cols = []
+	cols.append([f'{t}' for t in np.argmax(y_test[:10], axis=-1)])
+	cols.append([f'{t}' for t in np.argmax(classifier.predict(benign_vae_outputs), axis=-1)])
+	cols.append([f'{t}' for t in np.argmax(classifier.predict(victim_outputs), axis=-1)])
+	cols.append([f'{t}' for t in np.argmax(classifier.predict(adv_outputs), axis=-1)])
+	cols.append([f'{t}' for t in np.argmax(classifier.predict(random_advs), axis=-1)])
+	cols.append([f'{t}' for t in np.argmax(classifier.predict(victim_advs), axis=-1)])
+	rows = ['Original', 'Shadow VAE (Benign) Outputs', 'Victim VAE Outputs', 'White-Box-Encoder Attacks', 'Random Generated Attacks', 'Black-Box-Encoder Attacks']
+	for ax, col in zip(axes, cols):
+		for a, c in zip(ax, col):
+			a.set_title(c)
 	for ax, row in zip(axes[:,0], rows):
-	    ax.set_ylabel(row, rotation=0, size='large')
-   	fig.tight_layout()
+		ax.set_ylabel(row, rotation=60, size=6)
+	fig.suptitle(title, fontsize=16)
 	plt.show()
 
 mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
@@ -135,8 +152,8 @@ if DATA == 'mnist':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='mnist')
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='mnist')
 
 elif DATA == 'cifar10':
 	# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.
@@ -177,6 +194,6 @@ elif DATA == 'cifar10':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='cifar10')
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='cifar10')
 
