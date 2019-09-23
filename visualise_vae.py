@@ -110,7 +110,8 @@ adv_decoder = load_model(f'snapshots/{DATA}-adv-decoder-{VAE_DIM}d.h5', compile=
 adv_decoder.summary()
 egnostic_advvae_decoder = load_model(f'snapshots/{DATA}-egnostic_adv-decoder-{VAE_DIM}d-{VAE_NUM}encoders.h5', compile=False)
 egnostic_advvae_decoder.summary()
-
+vae_from_gan = load_model(f'snapshots/cifar10-vae-from-gan-{VAE_DIM}d.h5', compile=False)
+vae_gan_decoder = load_model(f'snapshots/cifar10-vae-decoder-from-gan-{VAE_DIM}d.h5', compile=False)
 
 # Evaluation
 if DATA == 'mnist':
@@ -194,6 +195,6 @@ elif DATA == 'cifar10':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='cifar10')
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='cifar10')
+	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='cifar10')
+	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='cifar10')
 
