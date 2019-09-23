@@ -3,7 +3,7 @@ from keras.datasets import mnist
 from keras.models import Model, load_model
 import argparse
 import utils
-from vae import VAE, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
+from vae import VAE, VAEGAN, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
@@ -24,10 +24,11 @@ if DATA =='mnist':
 elif DATA =='cifar10':
 	INPUT_SHAPE = (32,32,3)
 TRAIN_VAE = False			# train a vae for begining or load a trained one
-TRAIN_advVAE = True
+TRAIN_advVAE = False
 TRAIN_CVAE = False
 TRAIN_advCVAE = False
 TRAIN_EGNOSTIC_VAE =False	# Train an encoder-egnostic MVD
+TRAIN_VAEGAN = True
 VAE_NUM = 10 		 		# Number of encoders used to train the encoder-egnostic MVD
 
 if __name__ == '__main__':
@@ -137,6 +138,13 @@ if __name__ == '__main__':
 			victim.encoder.save(f'snapshots/victim-cifar10-vae-encoder-{CIFAR_VAE_DIM}d.h5')
 			victim.decoder.save(f'snapshots/victim-cifar10-vae-decoder-{CIFAR_VAE_DIM}d.h5')
 
+		if TRAIN_VAEGAN:
+			model = VAEGAN(INPUT_SHAPE, CIFAR_INTER_DIM, CIFAR_VAE_DIM)
+			model.train(cifar10_X_train, batch_size=BATCH_SIZE, epochs=VAE_EPOCHS, val_ratio=0.1)
+			model.vae.save(f'snapshots/cifar10-vae-from-gan-{CIFAR_VAE_DIM}d.h5')
+			model.encoder.save(f'snapshots/cifar10-vae-encoder-from-gan-{CIFAR_VAE_DIM}d.h5')
+			model.decoder.save(f'snapshots/cifar10-vae-decoder-from-gan-{CIFAR_VAE_DIM}d.h5')
+
 		if TRAIN_advVAE:
 			print('===== Loading VAE =======')
 			vae = load_model(f'./snapshots/cifar10-vae-{CIFAR_VAE_DIM}d.h5', compile=False)
@@ -193,6 +201,9 @@ if __name__ == '__main__':
 			ego_adv_vae, ego_adv_decoder = ego_advvae.attack(x=cifar10_X_train, y=y_labels, batch_size=32, epochs=ADV_EPOCHS, val_ratio=0.1)
 			ego_adv_vae.save(f'snapshots/cifar10-egnostic_adv-vae-{CIFAR_VAE_DIM}d-{VAE_NUM}encoders.h5')
 			ego_adv_decoder.save(f'snapshots/cifar10-egnostic_adv-decoder-{CIFAR_VAE_DIM}d-{VAE_NUM}encoders.h5')
+
+		
+
 
 
 
