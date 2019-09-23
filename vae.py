@@ -221,7 +221,8 @@ class VAEGAN:
 		x_c = Dropout(0.2)(x_c)
 		x_c = Flatten()(x_c)
 		x_c = Dense(256, activation='relu')(x_c)
-		discrim_output = Dense(1)(x_c)
+		x_c = Dense(1)(x_c)
+		discrim_output = Activation('sigmoid')(x_c)
 		self.discriminator = Model(x_c_inputs, discrim_output, name='discriminator')
 		self.discriminator.summary()
 
