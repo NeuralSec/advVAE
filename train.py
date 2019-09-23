@@ -7,7 +7,7 @@ from vae import VAE, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
-DATA ='mnist'
+DATA ='cifar10'
 BATCH_SIZE = 32
 VAE_EPOCHS = 20
 ADV_EPOCHS = 100

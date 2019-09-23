@@ -5,16 +5,32 @@ import numpy as np
 import utils
 import os
 from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, TARGETED, TARGET_CLASS, VAE_NUM
+
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 if DATA == 'mnist':
 	VAE_DIM = MNIST_VAE_DIM
 elif DATA == 'cifar10':
 	VAE_DIM = CIFAR_VAE_DIM
+LOOSE = False
 
-def eval_set_selection(X, y, classifier, vae):
-	y_pred = classifier.predict(vae.predict(X))
-	inds = np.where(y_pred == y)
+
+def classifier_only_eval_set_selection(X, y, model):
+	pred_labels = np.argmax(model.predict(X), axis=-1)
+	true_labels = np.argmax(y, axis=-1)
+	inds = np.where(pred_labels == true_labels)
+	return X[inds][:1000], y[inds][:1000]
+
+def mnist_eval_set_selection(X, y, model, vae):
+	pred_labels = np.argmax(model.predict(vae.predict(X).reshape((-1,28,28,1))), axis=-1)
+	true_labels = np.argmax(y, axis=-1)
+	inds = np.where(pred_labels == true_labels)
+	return X[inds][:1000], y[inds][:1000]
+
+def cifar10_eval_set_selection(X, y, model, vae):
+	pred_labels = np.argmax(model.predict(vae.predict(X)), axis=-1)
+	true_labels = np.argmax(y, axis=-1)
+	inds = np.where(pred_labels == true_labels)
 	return X[inds][:1000], y[inds][:1000]
 
 def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, X_test, y_test, dataset='mnist'):
@@ -77,62 +93,89 @@ adv_decoder.summary()
 egnostic_advvae_decoder = load_model(f'snapshots/{DATA}-egnostic_adv-decoder-{VAE_DIM}d-{VAE_NUM}encoders.h5', compile=False)
 egnostic_advvae_decoder.summary()
 
-# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.
-black_box_mnist_test_X, black_box_mnist_test_y = eval_set_selection(mnist_X_test, mnist_y_test, classifier, vae)
-white_box_mnist_test_X, white_box_mnist_test_y = eval_set_selection(mnist_X_test, mnist_y_test, substitute, vae)
-black_box_cifar10_test_X, black_box_cifar10_test_y = eval_set_selection(cifar10_X_test, cifar10_y_test, classifier, vae)
-white_box_cifar10_test_X, white_box_cifar10_test_y = eval_set_selection(cifar10_X_test, cifar10_y_test, substitute, vae)
 
 # Evaluation
 if DATA == 'mnist':
-	if TARGETED:
-		black_box_y_labels = np.zeros(black_box_mnist_test_y.shape)
-		black_box_y_labels[:,TARGET_CLASS] = 1
-		white_box_y_labels = np.zeros(white_box_mnist_test_y.shape)
-		white_box_y_labels[:,TARGET_CLASS] = 1
+	# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.
+	if LOOSE:
+		classifier_test_X, classifier_test_y = classifier_only_eval_set_selection(mnist_X_test, mnist_y_test, classifier)
+		substitute_test_X, substitute_test_y = classifier_only_eval_set_selection(mnist_X_test, mnist_y_test, substitute)
 	else:
-		black_box_y_labels = black_box_mnist_test_y
-		white_box_y_labels = white_box_mnist_test_y
-	print(f'**********************Black-box targeted:{TARGETED} attacks eval (mnist)******************************')
-	print(f'Predicted labels of the first ten examples (black-box-classifier setting): {np.argmax(classifier.predict(advvae.predict(black_box_mnist_test_X[:10]).reshape((-1,28,28,1))), axis=-1)}')
-	print(f'Accuracy in the black-box-classifier setting (benign vae): {classifier.evaluate(vae.predict(black_box_mnist_test_X).reshape((-1,28,28,1)), black_box_y_labels)}')
-	print(f'Accuracy in the black-box-classifier setting: {classifier.evaluate(advvae.predict(black_box_mnist_test_X).reshape((-1,28,28,1)), black_box_y_labels)}')
-	print(f'Accuracy in the black-box-encoder setting: {substitute.evaluate(adv_decoder.predict(victim_encoder.predict(white_box_mnist_test_X)[2]).reshape((-1,28,28,1)), white_box_y_labels)}')
-	print(f'Accuracy in the black-box-encoder setting (encoder egnostic): {substitute.evaluate(egnostic_advvae_decoder.predict(victim_encoder.predict(white_box_mnist_test_X)[2]).reshape((-1,28,28,1)), white_box_y_labels)}')
-	print(f'Accuracy in the double-black-box setting: {classifier.evaluate(adv_decoder.predict(victim_encoder.predict(black_box_mnist_test_X)[2]).reshape((-1,28,28,1)), black_box_y_labels)}')
-	print(f'Accuracy in the double-black-box setting (encoder egnostic): {classifier.evaluate(egnostic_advvae_decoder.predict(victim_encoder.predict(black_box_mnist_test_X)[2]).reshape((-1,28,28,1)), black_box_y_labels)}')
+		classifier_test_X, classifier_test_y = mnist_eval_set_selection(mnist_X_test, mnist_y_test, classifier, vae)
+		substitute_test_X, substitute_test_y = mnist_eval_set_selection(mnist_X_test, mnist_y_test, substitute, vae)
+	if TARGETED:
+		classifier_y_labels = np.zeros(classifier_test_y.shape)
+		classifier_y_labels[:,TARGET_CLASS] = 1
+		substitute_y_labels = np.zeros(substitute_test_y.shape)
+		substitute_y_labels[:,TARGET_CLASS] = 1
+	else:
+		classifier_y_labels = classifier_test_y
+		substitute_y_labels = substitute_test_y
+	
+	# predictions
+	black_box_classifier_pred_benign = np.argmax(classifier.predict(vae.predict(classifier_test_X).reshape((-1,28,28,1))), axis=-1)
+	double_white_box_pred_benign = np.argmax(substitute.predict(vae.predict(substitute_test_X).reshape((-1,28,28,1))), axis=-1)
 
-	print(f'**********************White-box targeted:{TARGETED} attacks eval (mnist)******************************')
-	print(f'Predicted labels of the first ten examples (double-white-box setting): {np.argmax(substitute.predict(advvae.predict(white_box_mnist_test_X[:10]).reshape((-1,28,28,1))), axis=-1)}')
-	print(f'Accuracy in the double-white-box setting (benign vae): {substitute.evaluate(vae.predict(white_box_mnist_test_X).reshape((-1,28,28,1)), white_box_y_labels)}')
-	print(f'Accuracy in the double-white-box setting: {substitute.evaluate(advvae.predict(white_box_mnist_test_X).reshape((-1,28,28,1)), white_box_y_labels)}')
+	black_box_classifier_pred = classifier.predict(advvae.predict(classifier_test_X).reshape((-1,28,28,1)))
+	black_box_encoder_pred = substitute.predict(advvae.predict(substitute_test_X).reshape((-1,28,28,1)))
+	double_black_box_pred = classifier.predict(adv_decoder.predict(victim_encoder.predict(classifier_test_X)[2]).reshape((-1,28,28,1)))
+	double_white_box_pred = substitute.predict(advvae.predict(substitute_test_X).reshape((-1,28,28,1)))
+
+	# Evaluations (benign)
+	print(f'\n**********************Benign eval (mnist)******************************')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), black_box_classifier_pred_benign, name='black_box_benign')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), double_white_box_pred_benign, name='white_box_benign')
+	# Evaluations (adversarials)
+	print(f'\n**********************Black-box targeted:{TARGETED} attacks eval (mnist)******************************')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), np.argmax(black_box_classifier_pred, axis=-1), name='black_box_classifier')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(black_box_encoder_pred, axis=-1), name='black_box_encoder')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), np.argmax(double_black_box_pred, axis=-1), name='double_black_box')
+	print(f'\n**********************White-box targeted:{TARGETED} attacks eval (mnist)******************************')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, black_box_mnist_test_X, black_box_y_labels, dataset='mnist')
-	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, white_box_mnist_test_X, white_box_y_labels, dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='mnist')
 
 elif DATA == 'cifar10':
-	if TARGETED:
-		black_box_y_labels = np.zeros(black_box_cifar10_test_y.shape)
-		black_box_y_labels[:,TARGET_CLASS] = 1
-		white_box_y_labels = np.zeros(white_box_cifar10_test_y.shape)
-		white_box_y_labels[:,TARGET_CLASS] = 1
+	# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.
+	if LOOSE:
+		classifier_test_X, classifier_test_y = classifier_only_eval_set_selection(cifar10_X_test, cifar10_y_test, classifier)
+		substitute_test_X, substitute_test_y = classifier_only_eval_set_selection(cifar10_X_test, cifar10_y_test, substitute)
 	else:
-		black_box_y_labels = black_box_cifar10_test_y
-		white_box_y_labels = white_box_cifar10_test_y
-	print('**********************Black-box targeted attacks eval (cifar10)******************************')
-	print(f'Predicted labels of the first ten examples (black-box-classifier setting): {np.argmax(classifier.predict(advvae.predict(black_box_cifar10_test_X[:10])), axis=-1)}')
-	print(f'Accuracy in the black-box-classifier setting: {classifier.evaluate(advvae.predict(black_box_cifar10_test_X), black_box_cifar10_test_y)}')
-	print(f'Accuracy in the black-box-encoder setting: {substitute.evaluate(adv_decoder.predict(victim_encoder.predict(white_box_cifar10_test_X)[2]), white_box_y_labels)}')
-	print(f'Accuracy in the black-box-encoder setting (encoder egnostic): {substitute.evaluate(egnostic_advvae_decoder.predict(victim_encoder.predict(white_box_cifar10_test_X)[2]), white_box_y_labels)}')
-	print(f'Accuracy in the double-black-box setting: {classifier.evaluate(adv_decoder.predict(victim_encoder.predict(black_box_cifar10_test_X)[2]), black_box_cifar10_test_y)}')
-	print(f'Accuracy in the double-black-box setting (encoder egnostic): {classifier.evaluate(egnostic_advvae_decoder.predict(victim_encoder.predict(black_box_cifar10_test_X)[2]), black_box_cifar10_test_y)}')
+		classifier_test_X, classifier_test_y = cifar10_eval_set_selection(cifar10_X_test, cifar10_y_test, classifier, vae)
+		substitute_test_X, substitute_test_y = cifar10_eval_set_selection(cifar10_X_test, cifar10_y_test, substitute, vae)
+	if TARGETED:
+		classifier_y_labels = np.zeros(classifier_test_y.shape)
+		classifier_y_labels[:,TARGET_CLASS] = 1
+		substitute_y_labels = np.zeros(substitute_test_y.shape)
+		substitute_y_labels[:,TARGET_CLASS] = 1
+	else:
+		classifier_y_labels = classifier_test_y
+		substitute_y_labels = substitute_test_y
 	
-	print('**********************White-box targeted attacks eval (cifar10)******************************')
-	print(f'Predicted labels of the first ten examples (double-white-box setting): {np.argmax(substitute.predict(advvae.predict(white_box_cifar10_test_X[:10])), axis=-1)}')
-	print(f'Accuracy in the double-white-box setting: {substitute.evaluate(advvae.predict(white_box_cifar10_test_X), white_box_y_labels)}')
-	
-	# Plotting
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, black_box_cifar10_test_X, black_box_y_labels, dataset='cifar10')
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, white_box_cifar10_test_X, white_box_y_labels, dataset='cifar10')
+	# predictions
+	black_box_classifier_pred_benign = np.argmax(classifier.predict(vae.predict(classifier_test_X)), axis=-1)
+	double_white_box_pred_benign = np.argmax(substitute.predict(vae.predict(substitute_test_X)), axis=-1)
+
+	black_box_classifier_pred = classifier.predict(advvae.predict(classifier_test_X))
+	black_box_encoder_pred = substitute.predict(advvae.predict(substitute_test_X))
+	double_black_box_pred = classifier.predict(adv_decoder.predict(victim_encoder.predict(classifier_test_X)[2]))
+	double_white_box_pred = substitute.predict(advvae.predict(substitute_test_X))
+
+	# Evaluations (benign)
+	print(f'\n**********************Benign eval (cifar10)******************************')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), black_box_classifier_pred_benign, name='black_box_benign')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), double_white_box_pred_benign, name='white_box_benign')
+	# Evaluations (adversarials)
+	print(f'\n**********************Black-box targeted:{TARGETED} attacks eval (cifar10)******************************')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), np.argmax(black_box_classifier_pred, axis=-1), name='black_box_classifier')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(black_box_encoder_pred, axis=-1), name='black_box_encoder')
+	utils.evaluations(np.argmax(classifier_y_labels, axis=-1), np.argmax(double_black_box_pred, axis=-1), name='double_black_box')
+	print(f'\n**********************White-box targeted:{TARGETED} attacks eval (cifar10)******************************')
+	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
+
+	# Plotting on black-box and white-box test sets
+	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier_test_X, classifier_y_labels, dataset='cifar10')
+	#plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute_test_X, substitute_y_labels, dataset='cifar10')
 

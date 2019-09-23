@@ -1,6 +1,7 @@
 from keras.datasets import mnist, cifar10
 import numpy as np
 from keras.utils import to_categorical
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 def load_dataset(dataset='mnist'):
 	if dataset == 'cifar10':
@@ -39,3 +40,14 @@ def load_perturbation(data_type='train'):
 	all_x = np.concatenate([data[i]['x'] for i in range(10)], axis=0)
 	all_y = np.concatenate([data[i]['y'] for i in range(10)], axis=0)
 	return all_perturbations, all_x, all_y
+
+def evaluations(y_ture, y_pred, average='macro', name=''):
+	accracy = accuracy_score(y_ture, y_pred)
+	precision = precision_score(y_ture, y_pred, average=average)
+	recall = recall_score(y_ture, y_pred, average=average)
+	f1 = f1_score(y_ture, y_pred, average=average)
+	print(f'The accuracy ín {name} setting is {accracy}')
+	print(f'The precision ín {name} setting is {precision}')
+	print(f'The recall ín {name} setting is {recall}')
+	print(f'The f1_score ín {name} setting is {f1}')
+	return accracy, precision, recall, f1
