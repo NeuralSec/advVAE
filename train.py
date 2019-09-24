@@ -5,11 +5,13 @@ import argparse
 import utils
 from vae import VAE, VAEGAN, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
 import os
+import warnings
+warnings.filterwarnings('ignore')
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 DATA ='cifar10'
 BATCH_SIZE = 32
-VAE_EPOCHS = 20
+VAE_EPOCHS = 100
 ADV_EPOCHS = 20
 TARGETED = False
 TARGET_CLASS = 0

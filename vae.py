@@ -191,7 +191,7 @@ class VAEGAN:
 		# build VAE model
 		vae_outputs = self.decoder(self.encoder(vae_inputs)[2])
 		self.vae = Model(vae_inputs, vae_outputs, name='VAE')
-		reconstruction_loss = 32*32*3*K.sum(binary_crossentropy(vae_inputs, vae_outputs), axis=[-2,-1])
+		reconstruction_loss = K.sum(binary_crossentropy(vae_inputs, vae_outputs), axis=[-2,-1])
 		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
