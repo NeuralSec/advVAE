@@ -243,7 +243,8 @@ class VAEGAN:
 		    log_prob = tf.reduce_sum(log_prob, -1, name=name)   # keep_dims=True,
 		    return log_prob
 
-		reconstruction_loss = K.sum(K.abs(vae_inputs - vae_outputs), axis=[-3,-2,-1])
+		#reconstruction_loss = K.sum(K.abs(vae_inputs - vae_outputs), axis=[-3,-2,-1])
+		reconstruction_loss = 0
 		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
@@ -255,7 +256,7 @@ class VAEGAN:
 		d_loss = K.relu(1-discrim_real_score) + K.relu(1+discrim_ng_vae_score) + K.relu(1+discrim_ng_noise_score)
 		g_loss = discrim_vae_score - discrim_ng_vae_score + discrim_noise_score - discrim_ng_noise_score
 		adv_loss = K.mean(d_loss + g_loss)
-		vaegan_loss = vae_loss + 500* adv_loss
+		vaegan_loss = vae_loss + 500*adv_loss
 		self.vaegan.add_loss(vaegan_loss)
 		self.vaegan.compile(optimizer='adam')
 		self.vaegan.summary()
