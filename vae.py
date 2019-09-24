@@ -226,7 +226,7 @@ class VAEGAN:
 							name='vaegan')
 		
 		# define losses
-		reconstruction_loss = discrim_vae_score
+		reconstruction_loss = K.relu(1-discrim_vae_score)
 		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
@@ -234,7 +234,7 @@ class VAEGAN:
 		self.vae.add_loss(vae_loss)
 		self.vae.compile(optimizer='adam', metrics=['mae'])
 		self.vae.summary()
-		d_loss = K.relu(1-discrim_real_score) + K.relu(1+discrim_ng_vae_score) + K.relu(1+discrim_ng_noise_score)
+		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_vae_score) + K.relu(1-discrim_ng_noise_score)
 		g_loss = discrim_vae_score + discrim_noise_score - discrim_ng_vae_score - discrim_ng_noise_score
 		adv_loss = K.mean(d_loss + g_loss)
 		vaegan_loss = vae_loss + adv_loss
