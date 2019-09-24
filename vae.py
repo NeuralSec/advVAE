@@ -3,6 +3,7 @@ from keras.layers import Lambda, Input, Dense, Dropout, Reshape, Concatenate, Av
 from keras.layers import Conv2D, Conv2DTranspose, Flatten, MaxPooling2D, UpSampling2D
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
+from keras.optimizers import RMSprop
 from keras.utils import plot_model
 from keras import backend as K
 import keras.losses
@@ -227,7 +228,7 @@ class VAEGAN:
 		
 		self.vaegan = Model([vae_inputs, discrim_input], [discrim_vae_score, discrim_real_score, discrim_ng_score], name='vaegan')
 		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_score)
-		g_loss = discrim_ng_score - discrim_ng_score
+		g_loss = discrim_vae_score - discrim_ng_score
 		adv_loss = K.mean(d_loss + g_loss)
 		vaegan_loss = vae_loss + 10*adv_loss
 		self.vaegan.add_loss(vaegan_loss)
