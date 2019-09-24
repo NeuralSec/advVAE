@@ -230,7 +230,7 @@ class VAEGAN:
 		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_score)
 		g_loss = discrim_vae_score - discrim_ng_score
 		adv_loss = K.mean(d_loss + g_loss)
-		vaegan_loss = vae_loss + adv_loss
+		vaegan_loss = vae_loss + 100 * adv_loss
 		self.vaegan.add_loss(vaegan_loss)
 		self.vaegan.compile(optimizer='adam')
 		self.vaegan.summary()
