@@ -1,5 +1,5 @@
 import tensorflow as tf
-from keras.layers import Lambda, Input, Dense, Dropout, Reshape, Concatenate, Average, BatchNormalization
+from keras.layers import Lambda, Input, Dense, Dropout, Reshape, Concatenate, Average, Add, BatchNormalization
 from keras.layers import Conv2D, Conv2DTranspose, Flatten, MaxPooling2D, UpSampling2D
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
@@ -7,6 +7,7 @@ from keras.optimizers import RMSprop
 from keras.utils import plot_model
 from keras import backend as K
 import keras.losses
+import numpy as np
 
 #################################################################################################################################################
 
@@ -214,13 +215,15 @@ class VAEGAN:
 		self.discriminator.summary()
 
 		# build vaegan
-		sampled_code = K.random_normal(shape=(latent_dim,))
-		discrim_noise_score = self.discriminator(self.decoder(sampled_code))
+		sampled_code_inputs = Input(shape=(latent_dim,), name='sampled_code_inputs')
+		discrim_noise_score = self.discriminator(self.decoder(sampled_code_inputs))
 		discrim_vae_score = self.discriminator(self.vae(vae_inputs))
-		discrim_generator_score = discrim_vae_score + discrim_noise_score
 		discrim_real_score = self.discriminator(discrim_input)
-		discrim_ng_score = Lambda(K.stop_gradient)(discrim_generator_score)
-		self.vaegan = Model([vae_inputs, discrim_input], [discrim_vae_score, discrim_real_score, discrim_ng_score], name='vaegan')
+		discrim_ng_vae_score = Lambda(K.stop_gradient)(discrim_vae_score)
+		discrim_ng_noise_score = Lambda(K.stop_gradient)(discrim_noise_score)
+		self.vaegan = Model([vae_inputs, discrim_input, sampled_code_inputs], 
+							[discrim_vae_score, discrim_noise_score, discrim_real_score, discrim_ng_vae_score, discrim_ng_noise_score], 
+							name='vaegan')
 		
 		# define losses
 		reconstruction_loss = discrim_vae_score
@@ -231,16 +234,18 @@ class VAEGAN:
 		self.vae.add_loss(vae_loss)
 		self.vae.compile(optimizer='adam', metrics=['mae'])
 		self.vae.summary()
-		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_score)
-		g_loss = discrim_generator_score - discrim_ng_score
-		adv_loss = K.mean(d_loss + 10* g_loss)
+		d_loss = K.relu(1-discrim_real_score) + K.relu(1+discrim_ng_vae_score) + K.relu(1+discrim_ng_noise_score)
+		g_loss = discrim_vae_score + discrim_noise_score - discrim_ng_vae_score - discrim_ng_noise_score
+		adv_loss = K.mean(d_loss + g_loss)
 		vaegan_loss = vae_loss + adv_loss
 		self.vaegan.add_loss(vaegan_loss)
 		self.vaegan.compile(optimizer='adam')
 		self.vaegan.summary()
+		self.latent_dim = latent_dim
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
-		self.vaegan.fit([x, x], epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+		random_codes = np.random.normal(size=(x.shape[0], self.latent_dim))
+		self.vaegan.fit([x, x, random_codes], epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
 		return self.vae, self.encoder, self.decoder
 
 
