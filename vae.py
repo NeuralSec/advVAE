@@ -216,17 +216,25 @@ class VAEGAN:
 
 		# build vaegan
 		sampled_code_inputs = Input(shape=(latent_dim,), name='sampled_code_inputs')
-		discrim_noise_score = self.discriminator(self.decoder(sampled_code_inputs))
-		discrim_vae_score = self.discriminator(self.vae(vae_inputs))
+		decode_noise = self.decoder(sampled_code_inputs)
+		decode_noise_ng = Lambda(K.stop_gradient)(decode_noise)
+		vae_reconstructed = self.vae(vae_inputs)
+		vae_reconstructed_ng = Lambda(K.stop_gradient)(vae_reconstructed)
+		
+		discrim_noise_score = self.discriminator(decode_noise)
+		discrim_ng_noise_score = self.discriminator(decode_noise_ng)
+
+		discrim_vae_score = self.discriminator(vae_reconstructed)
+		discrim_ng_vae_score = self.discriminator(vae_reconstructed_ng)
+		
 		discrim_real_score = self.discriminator(discrim_input)
-		discrim_ng_vae_score = Lambda(K.stop_gradient)(discrim_vae_score)
-		discrim_ng_noise_score = Lambda(K.stop_gradient)(discrim_noise_score)
+
 		self.vaegan = Model([vae_inputs, discrim_input, sampled_code_inputs], 
-							[discrim_vae_score, discrim_noise_score, discrim_real_score, discrim_ng_vae_score, discrim_ng_noise_score], 
+							[discrim_noise_score, discrim_ng_noise_score, discrim_vae_score, discrim_ng_vae_score, discrim_real_score], 
 							name='vaegan')
 		
 		# define losses
-		reconstruction_loss = K.relu(1-discrim_vae_score)
+		reconstruction_loss = K.relu(1-discrim_vae_score) - K.relu(1-discrim_ng_vae_score)
 		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
@@ -234,8 +242,9 @@ class VAEGAN:
 		self.vae.add_loss(vae_loss)
 		self.vae.compile(optimizer='adam', metrics=['mae'])
 		self.vae.summary()
+		
 		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_vae_score) + K.relu(1-discrim_ng_noise_score)
-		g_loss = discrim_vae_score + discrim_noise_score - discrim_ng_vae_score - discrim_ng_noise_score
+		g_loss = discrim_vae_score - discrim_ng_vae_score + discrim_noise_score - discrim_ng_noise_score
 		adv_loss = K.mean(d_loss + g_loss)
 		vaegan_loss = vae_loss + adv_loss
 		self.vaegan.add_loss(vaegan_loss)
