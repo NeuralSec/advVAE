@@ -234,7 +234,16 @@ class VAEGAN:
 							name='vaegan')
 		
 		# define losses
-		reconstruction_loss = K.relu(1-discrim_vae_score) - K.relu(1-discrim_ng_vae_score)
+		def GaussianLogDensity(x, mu, log_var, name='GaussianLogDensity'):
+		    c = np.log(2 * np.pi)
+		    var = tf.exp(log_var)
+		    x_mu2 = tf.square(tf.sub(x, mu))   # [Issue] not sure the dim works or not?
+		    x_mu2_over_var = tf.div(x_mu2, var + EPSILON)
+		    log_prob = -0.5 * (c + log_var + x_mu2_over_var)
+		    log_prob = tf.reduce_sum(log_prob, -1, name=name)   # keep_dims=True,
+		    return log_prob
+
+		reconstruction_loss = K.sum(K.abs(vae_inputs - vae_outputs), axis=[-3,-2,-1])
 		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
