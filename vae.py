@@ -192,14 +192,6 @@ class VAEGAN:
 		# build VAE model
 		vae_outputs = self.decoder(self.encoder(vae_inputs)[2])
 		self.vae = Model(vae_inputs, vae_outputs, name='VAE')
-		reconstruction_loss = K.sum(binary_crossentropy(vae_inputs, vae_outputs), axis=[-2,-1])
-		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-		kl_loss = K.sum(kl_loss, axis=-1)
-		kl_loss *= -0.5
-		vae_loss = K.mean(reconstruction_loss + kl_loss)
-		self.vae.add_loss(vae_loss)
-		self.vae.compile(optimizer='adam', metrics=['mae'])
-		self.vae.summary()
 
 		# build discriminator
 		discrim_input = Input(shape=input_shape, name='discrim_input')
@@ -222,13 +214,25 @@ class VAEGAN:
 		self.discriminator.summary()
 
 		# build vaegan
+		sampled_code = K.random_normal(shape=(latent_dim,))
+		discrim_noise_score = self.discriminator(self.decoder(sampled_code))
 		discrim_vae_score = self.discriminator(self.vae(vae_inputs))
+		discrim_generator_score = discrim_vae_score + discrim_noise_score
 		discrim_real_score = self.discriminator(discrim_input)
-		discrim_ng_score = Lambda(K.stop_gradient)(discrim_vae_score)
-		
+		discrim_ng_score = Lambda(K.stop_gradient)(discrim_generator_score)
 		self.vaegan = Model([vae_inputs, discrim_input], [discrim_vae_score, discrim_real_score, discrim_ng_score], name='vaegan')
+		
+		# define losses
+		reconstruction_loss = discrim_vae_score
+		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
+		kl_loss = K.sum(kl_loss, axis=-1)
+		kl_loss *= -0.5
+		vae_loss = K.mean(reconstruction_loss + kl_loss)
+		self.vae.add_loss(vae_loss)
+		self.vae.compile(optimizer='adam', metrics=['mae'])
+		self.vae.summary()
 		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_score)
-		g_loss = discrim_vae_score - discrim_ng_score
+		g_loss = discrim_generator_score - discrim_ng_score
 		adv_loss = K.mean(d_loss + 10* g_loss)
 		vaegan_loss = vae_loss + adv_loss
 		self.vaegan.add_loss(vaegan_loss)
