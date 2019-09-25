@@ -8,6 +8,7 @@ from keras.utils import plot_model
 from keras import backend as K
 import keras.losses
 import numpy as np
+from tqdm import tqdm
 
 #################################################################################################################################################
 
@@ -146,7 +147,7 @@ class ConvVAE:
 #################################################################################################################################################
 
 class VAEGAN:
-	def __init__(self, input_shape, intermediate_dim, latent_dim):
+	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-6):
 		# reparameterization trick
 		# instead of sampling from Q(z|X), sample eps = N(0,I)
 		# z = z_mean + sqrt(var)*eps
@@ -165,8 +166,8 @@ class VAEGAN:
 			return z_mean + K.exp(0.5 * z_log_var) * epsilon
 
 		# build encoder model
-		vae_inputs = Input(shape=input_shape, name='vae_inputs')  # adapt this if using `channels_first` image data format
-		x_e = Conv2D(filters=3, kernel_size=(2,2), strides=1, activation='relu', padding='same')(vae_inputs)
+		encoder_inputs = Input(shape=input_shape, name='encoder_inputs')  # adapt this if using `channels_first` image data format
+		x_e = Conv2D(filters=3, kernel_size=(2,2), strides=1, activation='relu', padding='same')(encoder_inputs)
 		x_e = Conv2D(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='same')(x_e)
 		x_e = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x_e)
 		x_e = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x_e)
@@ -175,27 +176,25 @@ class VAEGAN:
 		z_mean = Dense(latent_dim, name='z_mean')(x_e)
 		z_log_var = Dense(latent_dim, name='z_log_var')(x_e)
 		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
-		self.encoder = Model(vae_inputs, [z_mean, z_log_var, z], name='Encoder')
-		self.encoder.summary()
+		self.encoder = Model(encoder_inputs, [z_mean, z_log_var, z], name='Encoder')
 
 		# build decoder model
-		latent_inputs = Input(shape=(latent_dim,))
+		latent_inputs = Input(shape=(latent_dim,), name='decoder_input')
 		x_d = Dense(intermediate_dim, activation='relu')(latent_inputs)
 		x_d = Dense(32*16*16, activation='relu')(x_d)
 		x_d = Reshape((16, 16, 32))(x_d)
 		x_d = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x_d)
 		x_d = Conv2DTranspose(filters=32, kernel_size=3, strides=1, activation='relu', padding='same')(x_d)
 		x_d = Conv2DTranspose(filters=32, kernel_size=(2,2), strides=(2,2), activation='relu', padding='valid')(x_d)
-		decoded = Conv2DTranspose(filters=3, kernel_size=1, strides=1, activation='sigmoid', padding='valid')(x_d)
+		decoded = Conv2DTranspose(filters=3, kernel_size=1, strides=1, activation='sigmoid', padding='valid', name='decoder_output')(x_d)
 		self.decoder = Model(latent_inputs, decoded, name='Decoder')
-		self.decoder.summary()
 		
 		# build VAE model
-		vae_outputs = self.decoder(self.encoder(vae_inputs)[2])
-		self.vae = Model(vae_inputs, vae_outputs, name='VAE')
+		vae_outputs = self.decoder(self.encoder(encoder_inputs)[2])
+		self.vae = Model(encoder_inputs, vae_outputs, name='VAE')
 
 		# build discriminator
-		discrim_input = Input(shape=input_shape, name='discrim_input')
+		discrim_input = Input(shape=input_shape, name='discriminator_input')
 		x_c = Conv2D(filters=32, kernel_size=(3,3), strides=1, activation='relu', padding='same')(discrim_input)
 		x_c = BatchNormalization()(x_c)
 		x_c = Conv2D(filters=32, kernel_size=(3,3), strides=1, activation='relu', padding='same')(x_c)
@@ -204,69 +203,91 @@ class VAEGAN:
 		x_c = Dropout(0.2)(x_c)
 		x_c = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same')(discrim_input)
 		x_c = BatchNormalization()(x_c)
-		x_c = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same')(x_c)
-		x_c = BatchNormalization()(x_c)
+		middle_conv = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same', name='discriminator_intermidiate_output')(x_c)
+		x_c = BatchNormalization()(middle_conv)
 		x_c = MaxPooling2D(pool_size=(2,2))(x_c)
 		x_c = Dropout(0.2)(x_c)
 		x_c = Flatten()(x_c)
 		x_c = Dense(256, activation='relu')(x_c)
-		discrim_output = Dense(1, activation='sigmoid')(x_c)
-		self.discriminator = Model(discrim_input, discrim_output, name='Discriminator')
-		self.discriminator.summary()
-
-		# build vaegan
-		sampled_code_inputs = Input(shape=(latent_dim,), name='sampled_code_inputs')
-		decode_noise = self.decoder(sampled_code_inputs)
-		decode_noise_ng = Lambda(K.stop_gradient)(decode_noise)
-		vae_reconstructed = self.vae(vae_inputs)
-		vae_reconstructed_ng = Lambda(K.stop_gradient)(vae_reconstructed)
+		discrim_output = Dense(1, activation='sigmoid', name='discriminator_output')(x_c)
+		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
-		discrim_noise_score = self.discriminator(decode_noise)
-		discrim_ng_noise_score = self.discriminator(decode_noise_ng)
+		# build vaegan _ng: no gradients of the vae, _ndg: no gradients of the discriminator 
+		real_inputs = Input(shape=input_shape, name='discriminator_real_input')
+		noise_inputs = Input(shape=(latent_dim,), name='discriminator_noise_inputs')
 
-		discrim_vae_score = self.discriminator(vae_reconstructed)
-		discrim_ng_vae_score = self.discriminator(vae_reconstructed_ng)
+		encode_real = self.encoder(real_inputs)
+		self.encoder_to_train = Model(real_inputs, encode_real)
 		
-		discrim_real_score = self.discriminator(discrim_input)
-
-		self.vaegan = Model([vae_inputs, discrim_input, sampled_code_inputs], 
-							[discrim_noise_score, discrim_ng_noise_score, discrim_vae_score, discrim_ng_vae_score, discrim_real_score], 
-							name='vaegan')
+		decode_real = self.decoder(encode_real[2])
+		decode_noise = self.decoder(noise_inputs)
+		self.decoder_to_train = Model([real_inputs, noise_inputs], [decode_real, decode_noise])
+		
+		[cons_from_real, cons_from_noise] = self.decoder_to_train([real_inputs, noise_inputs])
+		discrim_real_score, l_real_x = self.discriminator(real_inputs)
+		discrim_tilde_score, l_tiled_x = self.discriminator(cons_from_real)
+		discrim_noise_score, _ = self.discriminator(cons_from_noise)
+		self.vaegan = Model([real_inputs, noise_inputs], [discrim_real_score, discrim_tilde_score, discrim_noise_score], name='vaegan')
 		
 		# define losses
-		def GaussianLogDensity(x, mu, log_var, name='GaussianLogDensity'):
-		    c = np.log(2 * np.pi)
-		    var = tf.exp(log_var)
-		    x_mu2 = tf.square(tf.sub(x, mu))   # [Issue] not sure the dim works or not?
-		    x_mu2_over_var = tf.div(x_mu2, var + EPSILON)
-		    log_prob = -0.5 * (c + log_var + x_mu2_over_var)
-		    log_prob = tf.reduce_sum(log_prob, -1, name=name)   # keep_dims=True,
-		    return log_prob
+		def NLLNormal(pred, target):
+			c = -0.5 * tf.log(2 * np.pi)
+			multiplier = -1.0 / (2.0 * 1)
+			tmp = tf.square(pred - target)
+			tmp *= multiplier
+			tmp += c
+			return tmp
 
-		#reconstruction_loss = K.sum(K.abs(vae_inputs - vae_outputs), axis=[-3,-2,-1])
-		reconstruction_loss = 0
-		kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
+		# loss in batch shape (?, 1)
+		reconstruction_loss = K.sum(-NLLNormal(l_tiled_x, l_real_x), axis=[-3,-2,-1])
+		kl_loss = 1 + encode_real[1] - K.square(encode_real[0]) - K.exp(encode_real[1])
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
-		vae_loss = K.mean(reconstruction_loss + kl_loss)
-		self.vae.add_loss(vae_loss)
-		self.vae.compile(optimizer='adam', metrics=['mae'])
-		self.vae.summary()
-		
-		d_loss = K.relu(1+discrim_real_score) + K.relu(1-discrim_ng_vae_score) + K.relu(1-discrim_ng_noise_score)
-		g_loss = discrim_vae_score - discrim_ng_vae_score + discrim_noise_score - discrim_ng_noise_score
-		adv_loss = K.mean(d_loss + g_loss)
-		vaegan_loss = vae_loss + 500*adv_loss
-		self.vaegan.add_loss(vaegan_loss)
+		encoder_loss = K.mean(reconstruction_loss/(32*32*64) + kl_loss)
+		discriminator_loss = K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score) + K.relu(1+discrim_noise_score))
+		decoder_loss = K.mean(gamma*reconstruction_loss - discriminator_loss)
+		# cut gradients for training vae only in one loss function:
+
+		#total_loss = K.mean(encoder_loss + decoder_loss + discriminator_loss) # averaged over a batch
+		self.encoder_to_train.add_loss(encoder_loss)
+		self.decoder_to_train.add_loss(decoder_loss)
+		self.vaegan.add_loss(discriminator_loss)
+		self.encoder_to_train.compile(optimizer='adam')
+		self.decoder_to_train.compile(optimizer='adam')
 		self.vaegan.compile(optimizer='adam')
+		print('\n********************** Encoder Summary *****************************************')
+		self.encoder_to_train.summary()
+		print('\n********************** Decoder Summary *****************************************')
+		self.decoder_to_train.summary()
+		print('\n********************** VAEGAN Summary *****************************************')
 		self.vaegan.summary()
 		self.latent_dim = latent_dim
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
-		random_codes = np.random.normal(size=(x.shape[0], self.latent_dim))
-		self.vaegan.fit([x, x, random_codes], epochs=epochs, batch_size=batch_size, validation_split=val_ratio, shuffle=True)
+		sampled_noise = np.random.normal(size=(x.shape[0], self.latent_dim))
+		for epoch in range(epochs):
+			print(f'Training epoch: {epoch}/{epochs}')
+			for batch_ind in tqdm(range(int(x.shape[0]/batch_size))):
+				start = batch_ind * batch_size
+				end = start + batch_size
+				x_batch = x[start:end]
+				sampled_noise_batch = sampled_noise[start:end]
+				
+				self.decoder.trainable = False
+				self.discriminator.trainable = False
+				self.encoder.trainable = True
+				self.encoder_to_train.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0)
+				
+				self.encoder.trainable = False
+				self.discriminator.trainable = False
+				self.decoder.trainable = True
+				self.decoder_to_train.fit([x_batch, sampled_noise_batch], epochs=1, batch_size=batch_size, validation_split=0, verbose=0)
+				
+				self.encoder.trainable = False
+				self.decoder.trainable = False
+				self.discriminator.trainable = True
+				self.vaegan.fit([x_batch, sampled_noise_batch], epochs=1, batch_size=batch_size, validation_split=0, verbose=0)
 		return self.vae, self.encoder, self.decoder
-
 
 #################################################################################################################################################
 
