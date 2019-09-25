@@ -281,8 +281,8 @@ class VAEGAN:
 		kl_loss = K.mean(kl_loss)
 		
 		encoder_loss = kl_loss/latent_dim - ll_loss/(32*32*64)
-		gan_loss = K.mean(K.relu(1-discrim_real_score)) + K.mean(K.relu(1+discrim_tilde_score_ng)) + K.mean(K.relu(1+discrim_noise_score_ng))
-		decoder_loss =  K.mean(K.relu(1-discrim_noise_score_nge)) + K.mean(K.relu(1-discrim_tilde_score_nge)) - gamma*ll_loss_nge
+		decoder_loss =  K.mean(K.relu(1-discrim_noise_score) + K.relu(1-discrim_tilde_score)) - gamma*ll_loss_nge
+		gan_loss = K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng))
 
 		self.encoder.add_loss(encoder_loss)
 		self.vae_nge.add_loss(decoder_loss)
@@ -315,12 +315,15 @@ class VAEGAN:
 				if batch_ind%100 == 0:
 					print(f'Encoder loss: {history.losses}')
 
+				self.encoder.trainable = False
 				self.vaegan.trainable = False
 				self.vae_nge.trainable = True
 				self.vae_nge.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Decoder losses: {history.losses}')
 
+				self.encoder.trainable = False
+				self.vae_nge.trainable = False
 				self.vaegan.trainable = True
 				self.vaegan.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:

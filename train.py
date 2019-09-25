@@ -20,7 +20,7 @@ TARGET_CLASS = 0
 COND_DIM = 10
 MNIST_VAE_DIM = 2			# Latent dimension of mnist VAE
 CIFAR_VAE_DIM = 64			# Latent dimension of cifar10 VAE
-VAEGAN_DIM = 256
+VAEGAN_DIM = 128
 MNIST_INTER_DIM = 512
 CIFAR_INTER_DIM = 512
 if DATA =='mnist':
