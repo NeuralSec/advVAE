@@ -12,7 +12,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 DATA ='cifar10'
 BATCH_SIZE = 32
-VAE_EPOCHS = 20
+VAE_EPOCHS = 1
 ADV_EPOCHS = 20
 TARGETED = False
 TARGET_CLASS = 0
@@ -20,6 +20,7 @@ TARGET_CLASS = 0
 COND_DIM = 10
 MNIST_VAE_DIM = 2			# Latent dimension of mnist VAE
 CIFAR_VAE_DIM = 64			# Latent dimension of cifar10 VAE
+VAEGAN_DIM = 256
 MNIST_INTER_DIM = 512
 CIFAR_INTER_DIM = 512
 if DATA =='mnist':

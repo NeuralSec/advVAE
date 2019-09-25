@@ -4,7 +4,7 @@ from keras.models import load_model
 import numpy as np
 import utils
 import os
-from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, TARGETED, TARGET_CLASS, VAE_NUM
+from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, VAEGAN_DIM, TARGETED, TARGET_CLASS, VAE_NUM
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
@@ -110,8 +110,8 @@ adv_decoder = load_model(f'snapshots/{DATA}-adv-decoder-{VAE_DIM}d.h5', compile=
 adv_decoder.summary()
 egnostic_advvae_decoder = load_model(f'snapshots/{DATA}-egnostic_adv-decoder-{VAE_DIM}d-{VAE_NUM}encoders.h5', compile=False)
 egnostic_advvae_decoder.summary()
-vae_from_gan = load_model(f'snapshots/cifar10-vae-from-gan-{VAE_DIM}d.h5', compile=False)
-vae_gan_decoder = load_model(f'snapshots/cifar10-vae-decoder-from-gan-{VAE_DIM}d.h5', compile=False)
+vae_from_gan = load_model(f'snapshots/cifar10-vae-from-gan-{VAEGAN_DIM}d.h5', compile=False)
+vae_gan_decoder = load_model(f'snapshots/cifar10-vae-decoder-from-gan-{VAEGAN_DIM}d.h5', compile=False)
 
 # Evaluation
 if DATA == 'mnist':
