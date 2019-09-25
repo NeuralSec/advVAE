@@ -1,6 +1,6 @@
 import tensorflow as tf
 from keras.layers import Lambda, Input, Dense, Dropout, Reshape, Concatenate, Average, Add, BatchNormalization
-from keras.layers import Conv2D, Conv2DTranspose, Flatten, MaxPooling2D, UpSampling2D
+from keras.layers import Conv2D, Conv2DTranspose, Flatten, MaxPooling2D, UpSampling2D, Activation
 from keras.models import Model
 from keras.losses import mse, binary_crossentropy
 from keras.optimizers import RMSprop
@@ -155,7 +155,7 @@ class ConvVAE:
 #################################################################################################################################################
 
 class VAEGAN:
-	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-1):
+	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-4):
 		# reparameterization trick
 		# instead of sampling from Q(z|X), sample eps = N(0,I)
 		# z = z_mean + sqrt(var)*eps
@@ -172,6 +172,11 @@ class VAEGAN:
 			# by default, random_normal has mean=0 and std=1.0
 			epsilon = K.random_normal(shape=(batch, dim))
 			return z_mean + K.exp(0.5 * z_log_var) * epsilon
+
+		def sampling_normal(latent_in):
+			batch =  K.shape(latent_in)[0]
+			dim = K.shape(latent_in)[1]
+			return K.random_normal(shape=(batch, dim))
 
 		# build encoder model
 		encoder_inputs = Input(shape=input_shape, name='encoder_inputs')  # adapt this if using `channels_first` image data format
@@ -217,33 +222,44 @@ class VAEGAN:
 		x_c = Dropout(0.2)(x_c)
 		x_c = Flatten()(x_c)
 		x_c = Dense(256, activation='relu')(x_c)
-		discrim_output = Dense(1, activation='sigmoid', name='discriminator_output')(x_c)
+		x_c = Dense(1)(x_c)
+		discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
 		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
-		# build vaegan _ng: no gradients of the vae, _ndg: no gradients of the discriminator 
-		real_inputs = Input(shape=input_shape, name='real_input')
-		noise_inputs = Input(shape=(latent_dim,), name='sampled_noise')
+		# build vaegan _ng: no gradients of the vae, _nge: no gradients of the encoder 
+		encode_real = self.encoder(encoder_inputs)[2]
+		encode_real_nge = Lambda(K.stop_gradient)(encode_real)
+		
+		sample_noise = Lambda(sampling_normal, output_shape=(latent_dim,), name='sampled_noise')(encode_real)
+		sample_noise_nge = Lambda(K.stop_gradient)(sample_noise)
+		
+		decode_real = self.decoder(encode_real)
+		decode_real_nge = self.decoder(encode_real_nge)
+		
+		decode_noise = self.decoder(sample_noise)
+		decode_noise_nge = self.decoder(sample_noise_nge)
+		
+		self.vae_nge = Model(encoder_inputs, [decode_real_nge, decode_noise_nge], name='vae_encoder_fixed')
+		
+		[cons_from_real_nge, cons_from_noise_nge] = self.vae_nge(encoder_inputs)
+		cons_from_real_ng = Lambda(K.stop_gradient)(cons_from_real_nge)
+		cons_from_noise_ng = Lambda(K.stop_gradient)(cons_from_noise_nge)
+		
+		# No fixed
+		[discrim_real_score, l_real_x] = self.discriminator(encoder_inputs)
+		[discrim_tilde_score, l_tiled_x] = self.discriminator(decode_real)
+		[discrim_noise_score, l_noise] = self.discriminator(decode_noise)
 
-		encode_real = self.encoder(real_inputs)
-		print('*********** encode_real ***********',encode_real)
-		self.encoder_to_train = Model(real_inputs, encode_real, name='encoder_to_train')
-		
-		decode_real = self.decoder(self.encoder_to_train(real_inputs)[2])
-		decode_noise = self.decoder(noise_inputs)
-		self.decoder_to_train = Model([real_inputs, noise_inputs], [decode_real, decode_noise], name='decoder_to_train')
-		
-		[cons_from_real, cons_from_noise] = self.decoder_to_train([real_inputs, noise_inputs])
-		cons_from_real_ng = Lambda(K.stop_gradient)(cons_from_real)
-		cons_from_noise_ng = Lambda(K.stop_gradient)(cons_from_noise)
-		
-		[discrim_real_score, l_real_x] = self.discriminator(real_inputs)
-		[discrim_tilde_score, l_tiled_x] = self.discriminator(cons_from_real)
-		[discrim_noise_score, _] = self.discriminator(cons_from_noise)
+		# encoder fixes
+		[discrim_tilde_score_nge, l_tiled_x_nge] = self.discriminator(cons_from_real_nge)
+		[discrim_noise_score_nge, l_noise_nge] = self.discriminator(cons_from_noise_nge)
 
-		[discrim_tilde_score_ng, _] = self.discriminator(cons_from_real_ng)
-		[discrim_noise_score_ng, _] = self.discriminator(cons_from_noise_ng)
-		self.vaegan = Model([real_inputs, noise_inputs], [discrim_real_score, discrim_tilde_score_ng, discrim_noise_score_ng], name='vaegan')
+		# vae fixed
+		[discrim_tilde_score_ng, l_tiled_x_ng] = self.discriminator(cons_from_real_ng)
+		[discrim_noise_score_ng, l_noise_ng] = self.discriminator(cons_from_noise_ng)
 		
+		self.vaegan = Model(encoder_inputs, [discrim_real_score, discrim_tilde_score_ng, discrim_noise_score_ng], name='vaegan_vae_fixed')
+
 		# define losses
 		def NLLNormal(pred, target):
 			c = -0.5 * tf.log(2 * np.pi)
@@ -256,64 +272,57 @@ class VAEGAN:
 		# losses
 		ll_loss = K.sum(NLLNormal(l_tiled_x, l_real_x), axis=[-3,-2,-1])
 		ll_loss = K.mean(ll_loss)
+		ll_loss_nge = K.sum(NLLNormal(l_tiled_x_nge, l_real_x), axis=[-3,-2,-1])
+		ll_loss_nge = K.mean(ll_loss_nge)
+
 		kl_loss = 1 + encode_real[1] - K.square(encode_real[0]) - K.exp(encode_real[1])
 		kl_loss = K.sum(kl_loss, axis=-1)
 		kl_loss *= -0.5
 		kl_loss = K.mean(kl_loss)
 		
-		encoder_loss = kl_loss/latent_dim - ll_loss#/(32*32*64)
-		discriminator_loss = 0
-		#discriminator_loss = K.mean(K.relu(1-discrim_real_score)) + K.mean(K.relu(1+discrim_tilde_score_ng)) + K.mean(K.relu(1+discrim_noise_score_ng))
-		decoder_loss =  K.mean(K.relu(1-discrim_noise_score)) + K.mean(K.relu(1-discrim_tilde_score)) - gamma*ll_loss
-		# cut gradients for training vae only in one loss function:
+		encoder_loss = kl_loss/latent_dim - ll_loss/(32*32*64)
+		gan_loss = K.mean(K.relu(1-discrim_real_score)) + K.mean(K.relu(1+discrim_tilde_score_ng)) + K.mean(K.relu(1+discrim_noise_score_ng))
+		decoder_loss =  K.mean(K.relu(1-discrim_noise_score_nge)) + K.mean(K.relu(1-discrim_tilde_score_nge)) - gamma*ll_loss_nge
 
-		#total_loss = K.mean(encoder_loss + decoder_loss + discriminator_loss) # averaged over a batch
-		self.encoder_to_train.add_loss(encoder_loss)
-		self.decoder_to_train.add_loss(decoder_loss)
-		self.vaegan.add_loss(discriminator_loss)
-		self.encoder_to_train.compile(optimizer='adam')
-		self.decoder_to_train.compile(optimizer='adam')
+		self.encoder.add_loss(encoder_loss)
+		self.vae_nge.add_loss(decoder_loss)
+		self.vaegan.add_loss(gan_loss)
+		self.encoder.compile(optimizer='adam')
+		self.vae_nge.compile(optimizer='adam')
 		self.vaegan.compile(optimizer='adam')
 		print('\n********************** Encoder Summary *****************************************')
-		self.encoder_to_train.summary()
+		self.encoder.summary()
 		print('\n********************** Decoder Summary *****************************************')
-		self.decoder_to_train.summary()
+		self.vae_nge.summary()
 		print('\n********************** VAEGAN Summary *****************************************')
 		self.vaegan.summary()
 		self.latent_dim = latent_dim
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
 		history = LossHistory()
-		sampled_noise = np.random.normal(size=(x.shape[0], self.latent_dim))
-		self.encoder_to_train.trainable = False
-		self.decoder_to_train.trainable = False
-		self.vaegan.fit([x, sampled_noise], epochs=1, batch_size=batch_size, validation_split=0.1)
+		self.vaegan.fit(x, epochs=1, batch_size=batch_size, validation_split=0.1)
 		for epoch in range(epochs):
 			print(f'Training epoch: {epoch+1}/{epochs}')
 			for batch_ind in tqdm(range(int(x.shape[0]/batch_size))):
 				start = batch_ind * batch_size
 				end = start + batch_size
 				x_batch = x[start:end]
-				sampled_noise_batch = sampled_noise[start:end]
 				
-				self.decoder_to_train.trainable = False
+				self.vae_nge.trainable = False
 				self.vaegan.trainable = False
-				self.encoder_to_train.trainable = True
-				self.encoder_to_train.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				self.encoder.trainable = True
+				self.encoder.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Encoder loss: {history.losses}')
 
-				self.encoder_to_train.trainable = False
 				self.vaegan.trainable = False
-				self.decoder_to_train.trainable = True
-				self.decoder_to_train.fit([x_batch, sampled_noise_batch], epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				self.vae_nge.trainable = True
+				self.vae_nge.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Decoder losses: {history.losses}')
 
-				self.encoder_to_train.trainable = False
-				self.decoder_to_train.trainable = False
 				self.vaegan.trainable = True
-				self.vaegan.fit([x_batch, sampled_noise_batch], epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				self.vaegan.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Discriminator losses: {history.losses}')
 		return self.vae, self.encoder, self.decoder
