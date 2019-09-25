@@ -221,10 +221,11 @@ class VAEGAN:
 		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
 		# build vaegan _ng: no gradients of the vae, _ndg: no gradients of the discriminator 
-		real_inputs = Input(shape=input_shape, name='discriminator_real_input')
-		noise_inputs = Input(shape=(latent_dim,), name='discriminator_noise_inputs')
+		real_inputs = Input(shape=input_shape, name='real_input')
+		noise_inputs = Input(shape=(latent_dim,), name='sampled_noise')
 
 		encode_real = self.encoder(real_inputs)
+		print('*********** encode_real ***********',encode_real)
 		self.encoder_to_train = Model(real_inputs, encode_real, name='encoder_to_train')
 		
 		decode_real = self.decoder(self.encoder_to_train(real_inputs)[2])
@@ -261,7 +262,8 @@ class VAEGAN:
 		kl_loss = K.mean(kl_loss)
 		
 		encoder_loss = kl_loss/latent_dim - ll_loss#/(32*32*64)
-		discriminator_loss = K.mean(K.relu(1-discrim_real_score)) + K.mean(K.relu(1+discrim_tilde_score_ng)) + K.mean(K.relu(1+discrim_noise_score_ng))
+		discriminator_loss = 0
+		#discriminator_loss = K.mean(K.relu(1-discrim_real_score)) + K.mean(K.relu(1+discrim_tilde_score_ng)) + K.mean(K.relu(1+discrim_noise_score_ng))
 		decoder_loss =  K.mean(K.relu(1-discrim_noise_score)) + K.mean(K.relu(1-discrim_tilde_score)) - gamma*ll_loss
 		# cut gradients for training vae only in one loss function:
 
