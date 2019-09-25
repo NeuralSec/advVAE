@@ -145,7 +145,7 @@ if __name__ == '__main__':
 		if TRAIN_VAEGAN:
 			model = VAEGAN(INPUT_SHAPE, CIFAR_INTER_DIM, VAEGAN_DIM)
 			model.train(cifar10_X_train, batch_size=BATCH_SIZE, epochs=VAE_EPOCHS, val_ratio=0.1)
-			model.vae.save(f'snapshots/cifar10-vae-from-gan-{CIFAR_VAE_DIM}d.h5')
+			model.vae.save(f'snapshots/cifar10-vae-from-gan-{VAEGAN_DIM}d.h5')
 			model.encoder.save(f'snapshots/cifar10-vae-encoder-from-gan-{VAEGAN_DIM}d.h5')
 			model.decoder.save(f'snapshots/cifar10-vae-decoder-from-gan-{VAEGAN_DIM}d.h5')
 
