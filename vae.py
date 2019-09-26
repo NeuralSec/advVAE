@@ -155,7 +155,7 @@ class ConvVAE:
 #################################################################################################################################################
 
 class VAEGAN:
-	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-4):
+	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-5):
 		# reparameterization trick
 		# instead of sampling from Q(z|X), sample eps = N(0,I)
 		# z = z_mean + sqrt(var)*eps
@@ -213,18 +213,16 @@ class VAEGAN:
 		x_c = Conv2D(filters=32, kernel_size=(3,3), strides=1, activation='relu', padding='same')(x_c)
 		x_c = BatchNormalization()(x_c)
 		x_c = MaxPooling2D(pool_size=(2,2))(x_c)
-		x_c = Dropout(0.2)(x_c)
 		x_c = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same')(discrim_input)
 		x_c = BatchNormalization()(x_c)
-		middle_conv = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same', name='discriminator_intermidiate_output')(x_c)
-		x_c = BatchNormalization()(middle_conv)
-		x_c = MaxPooling2D(pool_size=(2,2))(x_c)
-		x_c = Dropout(0.2)(x_c)
+		x_c = Conv2D(filters=64, kernel_size=(3,3), strides=1, activation='relu', padding='same', name='discriminator_intermidiate_output')(x_c)
+		x_c = BatchNormalization()(x_c)
+		middle_conv = MaxPooling2D(pool_size=(2,2))(x_c)
 		x_c = Flatten()(x_c)
 		x_c = Dense(256, activation='relu')(x_c)
 		x_c = Dense(1)(x_c)
-		discrim_output = Dense(1)(x_c)
-		#discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
+		#discrim_output = Dense(1)(x_c)
+		discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
 		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
 		# build vaegan _ng: no gradients of the vae, _nge: no gradients of the encoder 
@@ -281,9 +279,9 @@ class VAEGAN:
 		kl_loss *= -0.5
 		kl_loss = K.mean(kl_loss)
 		
-		encoder_loss = kl_loss/latent_dim - ll_loss/(32*32*64)
-		decoder_loss = - gamma*ll_loss_nge - K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_noise_score) + K.relu(1+discrim_tilde_score))
-		gan_loss = K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng))
+		encoder_loss = 100*(kl_loss/latent_dim - ll_loss/(16*16*64))
+		decoder_loss = 100*(- gamma*ll_loss_nge + K.mean(K.relu(1-discrim_noise_score) + K.relu(1-discrim_tilde_score)))
+		gan_loss = 100*(K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng)))
 
 		self.encoder.add_loss(encoder_loss)
 		self.vae_nge.add_loss(decoder_loss)
@@ -293,10 +291,13 @@ class VAEGAN:
 		self.vaegan.compile(optimizer='adam')
 		print('\n********************** Encoder Summary *****************************************')
 		self.encoder.summary()
+		keras.utils.plot_model(self.encoder, f'{self.encoder.name}.png', show_shapes=True)
 		print('\n********************** Decoder Summary *****************************************')
 		self.vae_nge.summary()
+		keras.utils.plot_model(self.vae_nge, f'{self.vae_nge.name}.png', show_shapes=True)
 		print('\n********************** VAEGAN Summary *****************************************')
 		self.vaegan.summary()
+		keras.utils.plot_model(self.vaegan, f'{self.vaegan.name}.png', show_shapes=True)
 		self.latent_dim = latent_dim
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
@@ -311,6 +312,7 @@ class VAEGAN:
 				self.vae_nge.trainable = False
 				self.vaegan.trainable = False
 				self.encoder.trainable = True
+				#[print(f'\nencoder : {layer.trainable}') for layer in self.encoder.layers]
 				self.encoder.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Encoder loss: {history.losses}')
@@ -318,6 +320,7 @@ class VAEGAN:
 				self.encoder.trainable = False
 				self.vaegan.trainable = False
 				self.vae_nge.trainable = True
+				#[print(f'\nvae_nge : {layer.trainable}') for layer in self.vae_nge.layers]
 				self.vae_nge.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Decoder losses: {history.losses}')
@@ -325,6 +328,7 @@ class VAEGAN:
 				self.encoder.trainable = False
 				self.vae_nge.trainable = False
 				self.vaegan.trainable = True
+				#[print(f'\nvaegan : {layer.trainable}') for layer in self.vaegan.layers]
 				self.vaegan.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Discriminator losses: {history.losses}')
