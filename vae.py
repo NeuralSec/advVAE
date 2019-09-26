@@ -291,13 +291,13 @@ class VAEGAN:
 		self.vaegan.compile(optimizer='adam')
 		print('\n********************** Encoder Summary *****************************************')
 		self.encoder.summary()
-		keras.utils.plot_model(self.encoder, f'{self.encoder.name}.png', show_shapes=True)
+		#keras.utils.plot_model(self.encoder, f'{self.encoder.name}.png', show_shapes=True)
 		print('\n********************** Decoder Summary *****************************************')
 		self.vae_nge.summary()
-		keras.utils.plot_model(self.vae_nge, f'{self.vae_nge.name}.png', show_shapes=True)
+		#keras.utils.plot_model(self.vae_nge, f'{self.vae_nge.name}.png', show_shapes=True)
 		print('\n********************** VAEGAN Summary *****************************************')
 		self.vaegan.summary()
-		keras.utils.plot_model(self.vaegan, f'{self.vaegan.name}.png', show_shapes=True)
+		#keras.utils.plot_model(self.vaegan, f'{self.vaegan.name}.png', show_shapes=True)
 		self.latent_dim = latent_dim
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
