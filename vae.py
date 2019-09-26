@@ -281,8 +281,8 @@ class VAEGAN:
 		kl_loss = K.mean(kl_loss)
 		
 		encoder_loss = kl_loss/latent_dim - ll_loss/(32*32*64)
-		decoder_loss =  -K.mean(K.relu(1-discrim_noise_score) + K.relu(1-discrim_tilde_score)) - gamma*ll_loss_nge
-		gan_loss = K.mean(K.relu(1+discrim_real_score) + K.relu(1-discrim_tilde_score_ng) + K.relu(1-discrim_noise_score_ng))
+		decoder_loss = - gamma*ll_loss_nge - K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_noise_score) + K.relu(1+discrim_tilde_score))
+		gan_loss = K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng))
 
 		self.encoder.add_loss(encoder_loss)
 		self.vae_nge.add_loss(decoder_loss)
