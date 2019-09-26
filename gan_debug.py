@@ -38,7 +38,7 @@ def create_discriminator(input_shape):
 	x_c = Dropout(0.3)(x_c)
 	x_c = Dense(256, activation=LeakyReLU(0.2), name='D3')(x_c)
 	x_c = Dense(1)(x_c)
-	discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
+	discrim_output = Activation('tanh', name='discriminator_output')(x_c)
 	discriminator = Model(discrim_input, discrim_output, name='Discriminator')
 	discriminator.compile(loss='binary_crossentropy', optimizer=adam_optimizer(), metrics=['acc'])
 	return discriminator
@@ -56,9 +56,6 @@ DIS = create_discriminator((28,28,1))
 GAN = create_gan(GEN, DIS)
 
 mnist_X_train, mnist_y_train, _, _ = utils.load_dataset(dataset='mnist')
-y_labels = np.argmax(mnist_y_train, axis=-1)
-inds = np.where(y_labels == 0)
-mnist_X_train = mnist_X_train[inds]
 epochs = 400
 batch_size=128
 
@@ -72,7 +69,8 @@ for epoch in range(epochs):
 		generated_batch = GEN.predict(noise_batch)
 		concat_batch= np.concatenate([x_batch, generated_batch])
 		y_dis=np.zeros(2*batch_size)
-		y_dis[:batch_size]=0.9
+		y_dis[:batch_size]= 0.9
+		y_dis[batch_size:]= -0.9
 		DIS.trainable=True
 		DIS.train_on_batch(concat_batch, y_dis)
 

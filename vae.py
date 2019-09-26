@@ -210,7 +210,7 @@ class VAEGAN_MNIST:
 		x_c = Dense(128, activation='relu', name='D1')(x_c)
 		x_c = Dense(64, activation='relu', name='D2')(x_c)
 		x_c = Dense(1)(x_c)
-		discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
+		discrim_output = Activation('tanh', name='discriminator_output')(x_c)
 		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
 		# build vaegan _ng: no gradients of the vae, _nge: no gradients of the encoder 
@@ -268,8 +268,8 @@ class VAEGAN_MNIST:
 		kl_loss *= -0.5
 		kl_loss = K.mean(kl_loss)
 		
-		encoder_loss = 100*(kl_loss + binary_Xentropy_loss)
-		decoder_loss = 100*(binary_Xentropy_loss + K.mean(K.relu(1-discrim_noise_score) + K.relu(1-discrim_tilde_score)))
+		encoder_loss = 100*(kl_loss - ll_loss/(14*14*64))
+		decoder_loss = 100*(-gamma*ll_loss + K.mean(- discrim_noise_score - discrim_tilde_score))
 		gan_loss = 100*(K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng)))
 
 		self.encoder.add_loss(encoder_loss)
