@@ -223,7 +223,8 @@ class VAEGAN:
 		x_c = Flatten()(x_c)
 		x_c = Dense(256, activation='relu')(x_c)
 		x_c = Dense(1)(x_c)
-		discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
+		discrim_output = Dense(1)(x_c)
+		#discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
 		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
 		
 		# build vaegan _ng: no gradients of the vae, _nge: no gradients of the encoder 
@@ -300,7 +301,6 @@ class VAEGAN:
 		
 	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
 		history = LossHistory()
-		self.vaegan.fit(x, epochs=1, batch_size=batch_size, validation_split=0.1)
 		for epoch in range(epochs):
 			print(f'Training epoch: {epoch+1}/{epochs}')
 			for batch_ind in tqdm(range(int(x.shape[0]/batch_size))):
