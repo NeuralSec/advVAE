@@ -154,7 +154,178 @@ class ConvVAE:
 
 #################################################################################################################################################
 
-class VAEGAN:
+class VAEGAN_MNIST:
+	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-5):
+		# reparameterization trick
+		# instead of sampling from Q(z|X), sample eps = N(0,I)
+		# z = z_mean + sqrt(var)*eps
+		def sampling(args):
+			"""Reparameterization trick by sampling fr an isotropic unit Gaussian.
+			# Arguments
+				args (tensor): mean and log of variance of Q(z|X)
+			# Returns
+				z (tensor): sampled latent vector
+			"""
+			z_mean, z_log_var = args
+			batch = K.shape(z_mean)[0]
+			dim = K.int_shape(z_mean)[1]
+			# by default, random_normal has mean=0 and std=1.0
+			epsilon = K.random_normal(shape=(batch, dim))
+			return z_mean + K.exp(0.5 * z_log_var) * epsilon
+
+		def sampling_normal(latent_in):
+			batch =  K.shape(latent_in)[0]
+			dim = K.shape(latent_in)[1]
+			return K.random_normal(shape=(batch, dim))
+
+		# build encoder model
+		encoder_inputs = Input(shape=input_shape, name='encoder_inputs')  # adapt this if using `channels_first` image data format
+		x_e = Flatten()(encoder_inputs)
+		x_e = Dense(intermediate_dim)(x_e)
+		z_mean = Dense(latent_dim, name='z_mean')(x_e)
+		z_log_var = Dense(latent_dim, name='z_log_var')(x_e)
+		z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
+		self.encoder = Model(encoder_inputs, [z_mean, z_log_var, z], name='Encoder')
+
+		# build decoder model
+		latent_inputs = Input(shape=(latent_dim,), name='decoder_input')
+		x_d = Dense(intermediate_dim, activation='relu')(latent_inputs)
+		x_d = Dense(input_shape[0]*input_shape[1]*input_shape[2], activation='sigmoid', name='decoder_output')(x_d)
+		decoded = Reshape(target_shape=input_shape)(x_d)
+		self.decoder = Model(latent_inputs, decoded, name='Decoder')
+		
+		# build VAE model
+		vae_outputs = self.decoder(self.encoder(encoder_inputs)[2])
+		self.vae = Model(encoder_inputs, vae_outputs, name='VAE')
+
+		# build discriminator
+		discrim_input = Input(shape=input_shape, name='discriminator_input')
+		x_c = Conv2D(filters=32, kernel_size=(3, 3), activation='relu', padding='same', name='C1')(discrim_input)
+		x_c = Conv2D(filters=32, kernel_size=(3, 3), activation='relu', padding='same', name='C2')(x_c)
+		x_c = MaxPooling2D(pool_size=(2,2), name='MP1')(x_c)
+		x_c = Conv2D(filters=64, kernel_size=(3, 3), activation='relu', padding='same', name='C3')(x_c)
+		middle_conv = Conv2D(filters=64, kernel_size=(3, 3), activation='relu', padding='same', name='C4')(x_c)
+		x_c = MaxPooling2D(pool_size=(2,2), name='MP2')(middle_conv)
+		x_c = Flatten(name='Flatten')(x_c)
+		x_c = Dense(128, activation='relu', name='D1')(x_c)
+		x_c = Dense(64, activation='relu', name='D2')(x_c)
+		x_c = Dense(1)(x_c)
+		discrim_output = Activation('sigmoid', name='discriminator_output')(x_c)
+		self.discriminator = Model(discrim_input, [discrim_output, middle_conv], name='Discriminator')
+		
+		# build vaegan _ng: no gradients of the vae, _nge: no gradients of the encoder 
+		encode_real = self.encoder(encoder_inputs)[2]
+		encode_real_nge = Lambda(K.stop_gradient)(encode_real)
+		
+		sample_noise = Lambda(sampling_normal, output_shape=(latent_dim,), name='sampled_noise')(encode_real)
+		sample_noise_nge = Lambda(K.stop_gradient)(sample_noise)
+		
+		decode_real = self.decoder(encode_real)
+		decode_real_nge = self.decoder(encode_real_nge)
+		
+		decode_noise = self.decoder(sample_noise)
+		decode_noise_nge = self.decoder(sample_noise_nge)
+		
+		self.vae_nge = Model(encoder_inputs, [decode_real_nge, decode_noise_nge], name='vae_encoder_fixed')
+		
+		[cons_from_real_nge, cons_from_noise_nge] = self.vae_nge(encoder_inputs)
+		cons_from_real_ng = Lambda(K.stop_gradient)(cons_from_real_nge)
+		cons_from_noise_ng = Lambda(K.stop_gradient)(cons_from_noise_nge)
+		
+		# No fixed
+		[discrim_real_score, l_real_x] = self.discriminator(encoder_inputs)
+		[discrim_tilde_score, l_tiled_x] = self.discriminator(decode_real)
+		[discrim_noise_score, l_noise] = self.discriminator(decode_noise)
+
+		# encoder fixes
+		[discrim_tilde_score_nge, l_tiled_x_nge] = self.discriminator(cons_from_real_nge)
+		[discrim_noise_score_nge, l_noise_nge] = self.discriminator(cons_from_noise_nge)
+
+		# vae fixed
+		[discrim_tilde_score_ng, l_tiled_x_ng] = self.discriminator(cons_from_real_ng)
+		[discrim_noise_score_ng, l_noise_ng] = self.discriminator(cons_from_noise_ng)
+		
+		self.vaegan = Model(encoder_inputs, [discrim_real_score, discrim_tilde_score_ng, discrim_noise_score_ng], name='vaegan_vae_fixed')
+
+		# define losses
+		def NLLNormal(pred, target):
+			c = -0.5 * tf.log(2 * np.pi)
+			multiplier = 1.0 / (2.0 * 1)
+			tmp = tf.square(pred - target)
+			tmp *= -multiplier
+			tmp += c
+			return tmp
+
+		# losses
+		binary_Xentropy_loss = K.mean(K.mean(binary_crossentropy(encoder_inputs, decode_real), axis=[-3,-2,-1]))
+		ll_loss = K.sum(NLLNormal(l_tiled_x, l_real_x), axis=[-3,-2,-1])
+		ll_loss = K.mean(ll_loss)
+		ll_loss_nge = K.sum(NLLNormal(l_tiled_x_nge, l_real_x), axis=[-3,-2,-1])
+		ll_loss_nge = K.mean(ll_loss_nge)
+
+		kl_loss = 1 + encode_real[1] - K.square(encode_real[0]) - K.exp(encode_real[1])
+		kl_loss = K.sum(kl_loss, axis=-1)
+		kl_loss *= -0.5
+		kl_loss = K.mean(kl_loss)
+		
+		encoder_loss = 100*(kl_loss + binary_Xentropy_loss)
+		decoder_loss = 100*(binary_Xentropy_loss + K.mean(K.relu(1-discrim_noise_score) + K.relu(1-discrim_tilde_score)))
+		gan_loss = 100*(K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng)))
+
+		self.encoder.add_loss(encoder_loss)
+		self.vae_nge.add_loss(decoder_loss)
+		self.vaegan.add_loss(gan_loss)
+		self.encoder.compile(optimizer='adam')
+		self.vae_nge.compile(optimizer='adam')
+		self.vaegan.compile(optimizer='adam')
+		print('\n********************** Encoder Summary *****************************************')
+		self.encoder.summary()
+		keras.utils.plot_model(self.encoder, f'{self.encoder.name}.png', show_shapes=True)
+		print('\n********************** Decoder Summary *****************************************')
+		self.vae_nge.summary()
+		keras.utils.plot_model(self.vae_nge, f'{self.vae_nge.name}.png', show_shapes=True)
+		print('\n********************** VAEGAN Summary *****************************************')
+		self.vaegan.summary()
+		keras.utils.plot_model(self.vaegan, f'{self.vaegan.name}.png', show_shapes=True)
+		self.latent_dim = latent_dim
+		
+	def train(self, x, batch_size=32, epochs=10, val_ratio=0.1):
+		history = LossHistory()
+		for epoch in range(epochs):
+			print(f'Training epoch: {epoch+1}/{epochs}')
+			for batch_ind in tqdm(range(int(x.shape[0]/batch_size))):
+				start = batch_ind * batch_size
+				end = start + batch_size
+				x_batch = x[start:end]
+				
+				self.vae_nge.trainable = False
+				self.vaegan.trainable = False
+				self.encoder.trainable = True
+				#[print(f'\nencoder : {layer.trainable}') for layer in self.encoder.layers]
+				self.encoder.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				if batch_ind%100 == 0:
+					print(f'Encoder loss: {history.losses}')
+
+				self.encoder.trainable = False
+				self.vaegan.trainable = False
+				self.vae_nge.trainable = True
+				#[print(f'\nvae_nge : {layer.trainable}') for layer in self.vae_nge.layers]
+				self.vae_nge.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				if batch_ind%100 == 0:
+					print(f'Decoder losses: {history.losses}')
+
+				self.encoder.trainable = False
+				self.vae_nge.trainable = False
+				self.vaegan.trainable = True
+				#[print(f'\nvaegan : {layer.trainable}') for layer in self.vaegan.layers]
+				self.vaegan.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
+				if batch_ind%100 == 0:
+					print(f'Discriminator losses: {history.losses}')
+		return self.vae, self.encoder, self.decoder
+
+#################################################################################################################################################
+
+class VAEGAN_CIFAR10:
 	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-5):
 		# reparameterization trick
 		# instead of sampling from Q(z|X), sample eps = N(0,I)

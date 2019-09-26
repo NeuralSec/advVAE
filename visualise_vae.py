@@ -4,15 +4,16 @@ from keras.models import load_model
 import numpy as np
 import utils
 import os
-from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, VAEGAN_DIM, TARGETED, TARGET_CLASS, VAE_NUM
+from train import DATA, MNIST_VAE_DIM, CIFAR_VAE_DIM, MNIST_VAEGAN_DIM, CIFAR_VAEGAN_DIM, TARGETED, TARGET_CLASS, VAE_NUM
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 if DATA == 'mnist':
 	VAE_DIM = MNIST_VAE_DIM
+	VAEGAN_DIM = MNIST_VAEGAN_DIM
 elif DATA == 'cifar10':
 	VAE_DIM = CIFAR_VAE_DIM
-
+	VAEGAN_DIM = CIFAR_VAEGAN_DIM
 if TARGETED:
 	TITLE = f'Targeted to {TARGET_CLASS}'
 else:
@@ -40,7 +41,7 @@ def cifar10_eval_set_selection(X, y, model, vae):
 
 def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, X_test, y_test, title='', dataset='mnist'):
 	# Plotting
-	benign_vae_outputs = vae.predict(X_test[:10])
+	benign_vae_outputs = vae.predict(X_test[:10].reshape(-1,28,28,1))
 	latent_codes = vae_encoder.predict(X_test[:10])[2]
 	victim_outputs = victim_vae.predict(X_test[:10])
 	victim_codes = victim_encoder.predict(X_test[:10])[2]
@@ -110,8 +111,8 @@ adv_decoder = load_model(f'snapshots/{DATA}-adv-decoder-{VAE_DIM}d.h5', compile=
 adv_decoder.summary()
 egnostic_advvae_decoder = load_model(f'snapshots/{DATA}-egnostic_adv-decoder-{VAE_DIM}d-{VAE_NUM}encoders.h5', compile=False)
 egnostic_advvae_decoder.summary()
-vae_from_gan = load_model(f'snapshots/cifar10-vae-from-gan-{VAEGAN_DIM}d.h5', compile=False)
-vae_gan_decoder = load_model(f'snapshots/cifar10-vae-decoder-from-gan-{VAEGAN_DIM}d.h5', compile=False)
+vae_from_gan = load_model(f'snapshots/{DATA}-vae-from-gan-{VAEGAN_DIM}d.h5', compile=False)
+vae_gan_decoder = load_model(f'snapshots/{DATA}-vae-decoder-from-gan-{VAEGAN_DIM}d.h5', compile=False)
 
 # Evaluation
 if DATA == 'mnist':
@@ -153,8 +154,8 @@ if DATA == 'mnist':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='mnist')
-	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='mnist')
+	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='mnist')
+	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='mnist')
 
 elif DATA == 'cifar10':
 	# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.

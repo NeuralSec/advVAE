@@ -3,16 +3,16 @@ from keras.datasets import mnist
 from keras.models import Model, load_model
 import argparse
 import utils
-from vae import VAE, VAEGAN, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
+from vae import VAE, VAEGAN_MNIST, VAEGAN_CIFAR10, ConvVAE, CVAE, ConvCVAE, advVAE, advCVAE, advEgnosticVAE
 import os
 import warnings
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
-DATA ='cifar10'
+DATA ='mnist'
 BATCH_SIZE = 32
-VAE_EPOCHS = 50
+VAE_EPOCHS = 10
 ADV_EPOCHS = 20
 TARGETED = False
 TARGET_CLASS = 0
@@ -20,7 +20,8 @@ TARGET_CLASS = 0
 COND_DIM = 10
 MNIST_VAE_DIM = 2			# Latent dimension of mnist VAE
 CIFAR_VAE_DIM = 64			# Latent dimension of cifar10 VAE
-VAEGAN_DIM = 128
+MNIST_VAEGAN_DIM = 2
+CIFAR_VAEGAN_DIM = 128
 MNIST_INTER_DIM = 512
 CIFAR_INTER_DIM = 512
 if DATA =='mnist':
@@ -37,9 +38,9 @@ VAE_NUM = 10 		 		# Number of encoders used to train the encoder-egnostic MVD
 
 if __name__ == '__main__':
 	# load mnist dataset for training and testing
-	mnist_X_train, mnist_y_train, mnist_X_test, mnist_y_test = utils.load_dataset(dataset='mnist')
-	mnist_X_train = np.reshape(mnist_X_train, (-1, 28**2))
-	mnist_X_test = np.reshape(mnist_X_test, (-1, 28**2))
+	mnist_X_train_cnn, mnist_y_train, mnist_X_test_cnn, mnist_y_test = utils.load_dataset(dataset='mnist')
+	mnist_X_train = np.reshape(mnist_X_train_cnn, (-1, 28**2))
+	mnist_X_test = np.reshape(mnist_X_test_cnn, (-1, 28**2))
 	cifar10_X_train, cifar10_y_train, cifar10_X_test, cifar10_y_test = utils.load_dataset(dataset='cifar10')
 	print('===== Loading shadow models =======')
 	resenet20 = load_model('trained_resnet/ResNet20v1-cifar10.h5')
@@ -69,6 +70,13 @@ if __name__ == '__main__':
 			victim.vae.save(f'snapshots/victim-mnist-vae-{MNIST_VAE_DIM}d.h5')
 			victim.encoder.save(f'snapshots/victim-mnist-vae-encoder-{MNIST_VAE_DIM}d.h5')
 			victim.decoder.save(f'snapshots/victim-mnist-vae-decoder-{MNIST_VAE_DIM}d.h5')
+
+		if TRAIN_VAEGAN:
+			model = VAEGAN_MNIST(INPUT_SHAPE, MNIST_INTER_DIM, MNIST_VAEGAN_DIM)
+			model.train(mnist_X_train_cnn, batch_size=BATCH_SIZE, epochs=VAE_EPOCHS, val_ratio=0.1)
+			model.vae.save(f'snapshots/mnist-vae-from-gan-{MNIST_VAEGAN_DIM}d.h5')
+			model.encoder.save(f'snapshots/mnist-vae-encoder-from-gan-{MNIST_VAEGAN_DIM}d.h5')
+			model.decoder.save(f'snapshots/mnist-vae-decoder-from-gan-{MNIST_VAEGAN_DIM}d.h5')
 
 		#loading trained vae for adv training
 		if TRAIN_advVAE:
@@ -143,11 +151,11 @@ if __name__ == '__main__':
 			victim.decoder.save(f'snapshots/victim-cifar10-vae-decoder-{CIFAR_VAE_DIM}d.h5')
 
 		if TRAIN_VAEGAN:
-			model = VAEGAN(INPUT_SHAPE, CIFAR_INTER_DIM, VAEGAN_DIM)
+			model = VAEGAN_CIFAR10(INPUT_SHAPE, CIFAR_INTER_DIM, CIFAR_VAEGAN_DIM)
 			model.train(cifar10_X_train, batch_size=BATCH_SIZE, epochs=VAE_EPOCHS, val_ratio=0.1)
-			model.vae.save(f'snapshots/cifar10-vae-from-gan-{VAEGAN_DIM}d.h5')
-			model.encoder.save(f'snapshots/cifar10-vae-encoder-from-gan-{VAEGAN_DIM}d.h5')
-			model.decoder.save(f'snapshots/cifar10-vae-decoder-from-gan-{VAEGAN_DIM}d.h5')
+			model.vae.save(f'snapshots/cifar10-vae-from-gan-{CIFAR_VAEGAN_DIM}d.h5')
+			model.encoder.save(f'snapshots/cifar10-vae-encoder-from-gan-{CIFAR_VAEGAN_DIM}d.h5')
+			model.decoder.save(f'snapshots/cifar10-vae-decoder-from-gan-{CIFAR_VAEGAN_DIM}d.h5')
 
 		if TRAIN_advVAE:
 			print('===== Loading VAE =======')
