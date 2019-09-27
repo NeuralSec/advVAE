@@ -155,7 +155,7 @@ class ConvVAE:
 #################################################################################################################################################
 
 class VAEGAN_MNIST:
-	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-5):
+	def __init__(self, input_shape, intermediate_dim, latent_dim, gamma=1e-3):
 		# reparameterization trick
 		# instead of sampling from Q(z|X), sample eps = N(0,I)
 		# z = z_mean + sqrt(var)*eps
@@ -268,13 +268,13 @@ class VAEGAN_MNIST:
 		kl_loss *= -0.5
 		kl_loss = K.mean(kl_loss)
 		
-		encoder_loss = 100*(kl_loss - ll_loss/(14*14*64))
-		decoder_loss = 100*(-gamma*ll_loss + K.mean(- discrim_noise_score - discrim_tilde_score))
-		gan_loss = 100*(K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng)))
+		encoder_loss = kl_loss/latent_dim - ll_loss/(14*14*64)
+		decoder_loss = -gamma*ll_loss + K.mean(- discrim_noise_score - discrim_tilde_score)
+		discriminator_loss = K.mean(K.relu(1-discrim_real_score) + K.relu(1+discrim_tilde_score_ng) + K.relu(1+discrim_noise_score_ng))
 
 		self.encoder.add_loss(encoder_loss)
 		self.vae_nge.add_loss(decoder_loss)
-		self.vaegan.add_loss(gan_loss)
+		self.vaegan.add_loss(discriminator_loss)
 		self.encoder.compile(optimizer='adam')
 		self.vae_nge.compile(optimizer='adam')
 		self.vaegan.compile(optimizer='adam')
@@ -298,25 +298,28 @@ class VAEGAN_MNIST:
 				end = start + batch_size
 				x_batch = x[start:end]
 				
-				self.vae_nge.trainable = False
-				self.vaegan.trainable = False
+				# train encoder
+				self.decoder.trainable = False
+				self.discriminator.trainable = False
 				self.encoder.trainable = True
 				#[print(f'\nencoder : {layer.trainable}') for layer in self.encoder.layers]
 				self.encoder.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Encoder loss: {history.losses}')
 
+				# train decoder
 				self.encoder.trainable = False
-				self.vaegan.trainable = False
-				self.vae_nge.trainable = True
+				self.discriminator.trainable = False
+				self.decoder.trainable = True
 				#[print(f'\nvae_nge : {layer.trainable}') for layer in self.vae_nge.layers]
 				self.vae_nge.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:
 					print(f'Decoder losses: {history.losses}')
 
+				# train discriminator
 				self.encoder.trainable = False
-				self.vae_nge.trainable = False
-				self.vaegan.trainable = True
+				self.decoder.trainable = False
+				self.discriminator.trainable = True
 				#[print(f'\nvaegan : {layer.trainable}') for layer in self.vaegan.layers]
 				self.vaegan.fit(x_batch, epochs=1, batch_size=batch_size, validation_split=0, verbose=0, callbacks=[history])
 				if batch_ind%100 == 0:

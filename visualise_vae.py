@@ -41,7 +41,7 @@ def cifar10_eval_set_selection(X, y, model, vae):
 
 def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, X_test, y_test, title='', dataset='mnist'):
 	# Plotting
-	benign_vae_outputs = vae.predict(X_test[:10].reshape(-1,28,28,1))
+	benign_vae_outputs = vae.predict(X_test[:10])
 	latent_codes = vae_encoder.predict(X_test[:10])[2]
 	victim_outputs = victim_vae.predict(X_test[:10])
 	victim_codes = victim_encoder.predict(X_test[:10])[2]
@@ -55,7 +55,6 @@ def plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, clas
 	fig, axes = plt.subplots(nrows=6, ncols=10)
 	for i in range(10):
 		if dataset=='mnist':
-			X_test = X_test.reshape(-1, 28, 28, 1)
 			benign_vae_outputs = benign_vae_outputs.reshape(-1, 28, 28, 1)
 			victim_outputs = victim_outputs.reshape(-1, 28, 28, 1)
 			adv_outputs = adv_outputs.reshape(-1, 28, 28, 1)
@@ -154,8 +153,8 @@ if DATA == 'mnist':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='mnist')
-	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='mnist')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='mnist')
 
 elif DATA == 'cifar10':
 	# Select the examples that can be correctly classified after being reconstructed by the benign vae as the evaluation datasets.
@@ -196,6 +195,6 @@ elif DATA == 'cifar10':
 	utils.evaluations(np.argmax(substitute_y_labels, axis=-1), np.argmax(double_white_box_pred, axis=-1), name='double_white_box')
 
 	# Plotting on black-box and white-box test sets
-	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='cifar10')
-	plot(vae_from_gan, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, classifier, classifier_test_X, classifier_y_labels, title=f'Black-box Attacks ({TITLE})', dataset='cifar10')
+	plot(vae, vae_encoder, victim_vae, victim_encoder, advvae, adv_decoder, substitute, substitute_test_X, substitute_y_labels, title=f'White-box Attacks ({TITLE})', dataset='cifar10')
 
